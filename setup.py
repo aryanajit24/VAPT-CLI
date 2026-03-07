@@ -12,7 +12,7 @@ REQUIREMENTS = [
 
 setup(
     name="vapt-cli",
-    version="9.0.0",
+    version="1.0.0",
     # Keep in sync with vapt/__init__.py
     author="aryanajit24",
     author_email="",  

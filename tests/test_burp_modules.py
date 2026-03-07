@@ -1,4 +1,4 @@
-"""Tests for v9.0 Burp Suite replacement modules."""
+"""Tests for Burp Suite replacement modules."""
 
 from __future__ import annotations
 

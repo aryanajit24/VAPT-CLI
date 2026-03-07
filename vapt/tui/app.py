@@ -214,7 +214,7 @@ Screen {
 class VAPTApp(App):
     """VAPT CLI Interactive Security Testing Console."""
 
-    TITLE = "VAPT CLI v9.0 — Security Testing Console"
+    TITLE = "VAPT CLI — Security Testing Console"
     CSS = CSS
     BINDINGS = [
         Binding("q", "quit", "Quit"),

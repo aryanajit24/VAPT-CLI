@@ -1,6 +1,6 @@
-# VAPT CLI v9.0.0
+# VAPT CLI
 
-![Version](https://img.shields.io/badge/version-9.0.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.10+-green?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-242%20passing-brightgreen?style=flat-square)
 ![License](https://img.shields.io/github/license/aryanajit24/VAPT-CLI?style=flat-square)
@@ -60,7 +60,7 @@ pip install -e .
 vapt --version
 ```
 
-You should see `VAPT CLI v9.0.0`.
+You should see the VAPT CLI version.
 
 ---
 
@@ -170,7 +170,7 @@ vapt smuggle --target https://example.com
 vapt bizscan --target https://example.com
 ```
 
-### Proxy & Interactive Tools (New in v9.0)
+### Proxy & Interactive Tools
 
 **Start the intercepting proxy** (like Burp's proxy — intercepts HTTP/HTTPS with SSL MITM):
 ```sh
@@ -465,13 +465,13 @@ vapt/
 │   ├── json_report.py   # JSON report output
 │   ├── pdf.py           # PDF report renderer
 │   └── templates/       # Jinja2 HTML/CSS templates
-├── proxy/               # Intercepting proxy (new in v9.0)
+├── proxy/               # Intercepting proxy
 │   ├── server.py        # MITM proxy with SSL interception
 │   └── storage.py       # SQLite flow storage
-├── tui/                 # Interactive terminal UI (new in v9.0)
+├── tui/                 # Interactive terminal UI
 │   └── app.py           # Textual TUI with 4 tabs
 └── utils/               # Shared utilities
-    ├── auth.py          # Authentication helpers│   ├── codec.py         # Encoder/decoder/hash tools (new in v9.0)    ├── helpers.py       # Common helper functions
+    ├── auth.py          # Authentication helpers│   ├── codec.py         # Encoder/decoder/hash tools    ├── helpers.py       # Common helper functions
     ├── notifications.py # Email/Slack alerts
     ├── ratelimit.py     # Rate limiting and stealth
     ├── validators.py    # Input validation
