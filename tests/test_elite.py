@@ -497,9 +497,9 @@ class TestEliteReportGenerator(unittest.TestCase):
 
 class TestVersion(unittest.TestCase):
 
-    def test_version_is_8(self):
+    def test_version_is_9(self):
         from vapt import __version__
-        self.assertTrue(__version__.startswith("8."))
+        self.assertTrue(__version__.startswith("9."))
 
 
 if __name__ == "__main__":

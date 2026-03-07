@@ -1,8 +1,8 @@
-# VAPT CLI v8.0.0
+# VAPT CLI v9.0.0
 
-![Version](https://img.shields.io/badge/version-8.0.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-9.0.0-blue?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.10+-green?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-144%20passing-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-242%20passing-brightgreen?style=flat-square)
 ![License](https://img.shields.io/github/license/aryanajit24/VAPT-CLI?style=flat-square)
 
 A command-line tool that finds security vulnerabilities in websites, APIs, networks, mobile apps, and source code.
@@ -14,6 +14,8 @@ A command-line tool that finds security vulnerabilities in websites, APIs, netwo
 Think of a website like a house. This tool checks if any doors are unlocked, if the windows are open, or if someone left the keys under the doormat. Except instead of a house, it checks websites and apps for security problems that hackers could exploit.
 
 It can:
+- **Intercept traffic** — MITM proxy with SSL interception, request replay, and flow storage
+- **Interactive TUI** — terminal-based UI with proxy log, repeater, intruder, and codec tabs
 - **Find open doors** — scan ports and services running on a server
 - **Check the locks** — test SSL/TLS certificates and encryption
 - **Try the windows** — look for web vulnerabilities like XSS, SQL injection, CSRF
@@ -22,6 +24,10 @@ It can:
 - **Inspect the cloud** — find misconfigured S3 buckets, Azure blobs, Firebase databases
 - **Analyze mobile apps** — decompile Android APKs and iOS IPAs for security issues
 - **Review source code** — detect hardcoded secrets, unsafe patterns, vulnerable dependencies
+- **Fuzz endpoints** — Burp Intruder-style 4-mode fuzzing engine with built-in payload sets
+- **Analyze tokens** — Sequencer-style token randomness analysis with statistical tests
+- **Encode/decode anything** — Base64, URL, Hex, HTML, JWT, hash identification
+- **Crawl websites** — Playwright-based headless crawler with form/JS/endpoint discovery
 - **Write the report** — generate professional PDF, HTML, or JSON reports
 
 ---
@@ -54,7 +60,7 @@ pip install -e .
 vapt --version
 ```
 
-You should see `VAPT CLI v8.0.0`.
+You should see `VAPT CLI v9.0.0`.
 
 ---
 
@@ -162,6 +168,48 @@ vapt smuggle --target https://example.com
 **Business logic scanner**:
 ```sh
 vapt bizscan --target https://example.com
+```
+
+### Proxy & Interactive Tools (New in v9.0)
+
+**Start the intercepting proxy** (like Burp's proxy — intercepts HTTP/HTTPS with SSL MITM):
+```sh
+vapt proxy --port 8080
+```
+Configure your browser to use `127.0.0.1:8080` as a proxy. Install the CA cert from `~/.vapt/ca/ca.pem` to intercept HTTPS.
+
+**Launch the interactive TUI** (terminal UI with proxy log, repeater, intruder, and codec):
+```sh
+vapt tui
+```
+Use keyboard shortcuts: `1`=Proxy, `2`=Repeater, `3`=Intruder, `4`=Codec, `q`=Quit.
+
+**Crawl a website** (Playwright-based headless browser crawler):
+```sh
+vapt crawl --target https://example.com --depth 3 --max-pages 100
+```
+Discovers pages, forms, API endpoints, JS files, and technologies. Use `--light` for a faster requests-based crawl.
+
+**Run the Intruder** (Burp Intruder replacement with 4 attack modes):
+```sh
+vapt intruder --target "https://example.com/search?q=§test§" --attack sniper --payloads sqli
+```
+Mark positions with `§markers§`. Attack modes: `sniper`, `battering_ram`, `pitchfork`, `cluster_bomb`. Built-in payloads: `sqli`, `xss`, `traversal`, `ssti`, `nosql`, `commands`, `common_passwords`, `idor`.
+
+**Analyze token randomness** (Burp Sequencer replacement):
+```sh
+vapt sequencer --url https://example.com/login --from cookie --name session --samples 200
+```
+Collects tokens and runs Shannon entropy, chi-squared, monobit, runs, and block frequency tests.
+
+**Encode/decode data** (Burp Decoder replacement):
+```sh
+vapt codec "hello world" --op b64e     # Base64 encode
+vapt codec "aGVsbG8=" --op b64d        # Base64 decode
+vapt codec "password" --op sha256       # SHA-256 hash
+vapt codec "5d41402abc4b2a76b9719d911017c592" --op hashid  # Identify hash type
+vapt codec "eyJhbGciOi..." --op jwtd    # Decode JWT
+vapt codec "test data" --op smart       # Try all decodings
 ```
 
 ### Infrastructure
@@ -352,7 +400,7 @@ vapt update
 
 ```
 vapt/
-├── main.py              # All 25 CLI commands
+├── main.py              # All 32 CLI commands
 ├── banner.py            # The cool banner you see when it starts
 ├── config.py            # Config wizard and API key management
 ├── database/            # SQLite knowledge base
@@ -367,6 +415,7 @@ vapt/
 │   ├── evidence.py      # Enriches findings with proof
 │   ├── exploit_validator.py  # Active exploit confirmation
 │   ├── intelligence.py  # Threat intelligence lookups
+│   ├── intruder.py      # Burp Intruder replacement (4 attack modes)
 │   ├── knowledge_base.py    # Vulnerability knowledge base
 │   ├── oob_server.py    # Out-of-band callback server
 │   ├── oob.py           # OOB payload manager
@@ -375,6 +424,7 @@ vapt/
 │   ├── risk_scorer.py   # CVSS-based risk scoring
 │   ├── safe_mode.py     # Safety profiles for bug bounty
 │   ├── scope.py         # Scope enforcement
+│   ├── sequencer.py     # Token randomness analyzer
 │   ├── session_manager.py   # Authenticated session handling
 │   ├── smart_hunt.py    # Smart hunting orchestrator
 │   ├── validator.py     # False positive filtering
@@ -387,6 +437,7 @@ vapt/
 │   ├── bizscan.py       # Business logic vulnerabilities
 │   ├── cloudscan.py     # Cloud misconfigurations
 │   ├── codescan.py      # Source code analysis (SAST)
+│   ├── crawler.py       # Playwright headless browser crawler
 │   ├── cve.py           # CVE lookup and matching
 │   ├── dbscan.py        # Database exposure scanning
 │   ├── deepjs.py        # Deep JavaScript reconnaissance
@@ -414,9 +465,13 @@ vapt/
 │   ├── json_report.py   # JSON report output
 │   ├── pdf.py           # PDF report renderer
 │   └── templates/       # Jinja2 HTML/CSS templates
+├── proxy/               # Intercepting proxy (new in v9.0)
+│   ├── server.py        # MITM proxy with SSL interception
+│   └── storage.py       # SQLite flow storage
+├── tui/                 # Interactive terminal UI (new in v9.0)
+│   └── app.py           # Textual TUI with 4 tabs
 └── utils/               # Shared utilities
-    ├── auth.py          # Authentication helpers
-    ├── helpers.py       # Common helper functions
+    ├── auth.py          # Authentication helpers│   ├── codec.py         # Encoder/decoder/hash tools (new in v9.0)    ├── helpers.py       # Common helper functions
     ├── notifications.py # Email/Slack alerts
     ├── ratelimit.py     # Rate limiting and stealth
     ├── validators.py    # Input validation
@@ -550,6 +605,7 @@ The main libraries used:
 | Library | Purpose |
 |---------|---------|
 | typer + rich | CLI interface and pretty output |
+| textual | Interactive terminal UI (TUI) |
 | requests + httpx | HTTP requests |
 | beautifulsoup4 + lxml | HTML parsing |
 | dnspython | DNS lookups |
@@ -570,11 +626,14 @@ The main libraries used:
 # Activate the virtual environment
 source venv/bin/activate
 
-# Run all 144 tests
+# Run all 242 tests
 python3 -m pytest tests/ -v
 
 # Run only the v8 module tests
 python3 -m pytest tests/test_v8_modules.py -v
+
+# Run the Burp replacement module tests
+python3 -m pytest tests/test_burp_modules.py -v
 
 # Run with coverage
 python3 -m pytest tests/ --cov=vapt --cov-report=html
@@ -594,7 +653,7 @@ No. The tool works without any API keys. Keys just unlock extra features like Sh
 With default settings (`--safety standard`), the tool is non-destructive. It only sends GET requests and lightweight tests. Use `--safety aggressive` only on targets you own.
 
 **Q: How is this different from Burp Suite or OWASP ZAP?**
-VAPT CLI is fully command-line based, runs automated scans without a GUI, and generates reports automatically. It's designed for CI/CD pipelines, bug bounty automation, and people who prefer terminals over GUIs.
+VAPT CLI is fully command-line based with an integrated intercepting proxy, Intruder-style fuzzer, token Sequencer, and codec — similar to Burp Suite Pro but terminal-native. It runs automated scans without a GUI, generates reports automatically, and is designed for CI/CD pipelines, bug bounty automation, and people who prefer terminals over GUIs.
 
 **Q: Can I use this in a CI/CD pipeline?**
 Yes. Use `--format json` to get machine-readable output, and `--min-severity high` to fail only on serious findings.

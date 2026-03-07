@@ -1985,6 +1985,294 @@ def cmd_db(
         raise typer.Exit(1)
 
 
+# ── Burp Suite replacement commands ──────────────────────
+
+
+@app.command("proxy")
+def cmd_proxy(
+    port: int = typer.Option(8080, "--port", "-p", help="Proxy listen port"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Proxy listen address"),
+    verbose: bool = typer.Option(False, "--verbose", help="Debug logging"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Export flows to JSON on exit"),
+) -> None:
+    """Start the intercepting HTTP/HTTPS proxy server."""
+    from vapt.proxy.server import CertificateAuthority, ProxyServer
+    from vapt.proxy.storage import ProxyStorage
+
+    print_banner()
+    storage = ProxyStorage()
+    ca = CertificateAuthority()
+
+    console.print(f"\n[bold green]VAPT Proxy starting on {host}:{port}[/bold green]")
+    console.print(f"CA certificate: [cyan]{ca.ca_cert_path}[/cyan]")
+    console.print("Configure your browser to use this proxy.")
+    console.print("Install the CA cert to intercept HTTPS traffic.")
+    console.print("Press [bold]Ctrl+C[/bold] to stop.\n")
+
+    proxy = ProxyServer(
+        host=host, port=port, storage=storage, ca=ca, verbose=verbose,
+    )
+
+    try:
+        proxy.start(background=True)
+        while proxy.running:
+            time.sleep(1)
+            flows = storage.get_flow_count()
+            console.print(f"\r[dim]Flows captured: {flows}[/dim]", end="")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        proxy.stop()
+        if output:
+            count = storage.export_flows(output)
+            console.print(f"\n[green]Exported {count} flows to {output}[/green]")
+        console.print(f"\n[bold green]Proxy stopped. Total flows: {storage.get_flow_count()}[/bold green]")
+
+
+@app.command("tui")
+def cmd_tui(
+    proxy_port: int = typer.Option(8080, "--port", "-p", help="Proxy port for the TUI"),
+) -> None:
+    """Launch the interactive security testing console (TUI)."""
+    from vapt.tui.app import launch_tui
+    launch_tui(proxy_port=proxy_port)
+
+
+@app.command("crawl")
+def cmd_crawl(
+    target: str = typer.Option(..., "--target", "-t", help="Target URL to crawl"),
+    max_depth: int = typer.Option(3, "--depth", help="Maximum crawl depth"),
+    max_pages: int = typer.Option(100, "--max-pages", help="Maximum pages to crawl"),
+    headless: bool = typer.Option(True, "--headless/--no-headless", help="Run browser in headless mode"),
+    light: bool = typer.Option(False, "--light", help="Use lightweight requests-based crawler (no browser)"),
+    output_dir: str = typer.Option("./vapt-reports", "--output", "-o", help="Output directory"),
+) -> None:
+    """Crawl a website — discover pages, forms, endpoints, and JS files."""
+    from vapt.scanner.crawler import Crawler, CrawlerLight
+
+    print_banner()
+    ok, target = validate_target(target)
+    if not ok:
+        console.print(f"[red]Invalid target: {target}[/red]")
+        raise typer.Exit(1)
+    console.print(f"\n[bold]Crawling [cyan]{target}[/cyan] (depth={max_depth}, max={max_pages})[/bold]\n")
+
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"), TimeElapsedColumn(), console=console) as prog:
+        task = prog.add_task("Crawling...", total=max_pages)
+
+        def on_progress(current, total, url):
+            prog.update(task, completed=current, description=f"[cyan]{url[:60]}[/cyan]")
+
+        if light:
+            crawler = CrawlerLight(target, max_depth=max_depth, max_pages=max_pages)
+        else:
+            crawler = Crawler(target, max_depth=max_depth, max_pages=max_pages, headless=headless)
+
+        result = crawler.run(progress_callback=on_progress)
+
+    table = Table(title="Crawl Results", show_header=True)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Pages crawled", str(result.pages_crawled))
+    table.add_row("Unique URLs", str(len(set(result.urls))))
+    table.add_row("Forms found", str(len(result.forms)))
+    table.add_row("JS files", str(len(result.js_files)))
+    table.add_row("API endpoints", str(len(result.endpoints)))
+    table.add_row("Technologies", ", ".join(result.technologies) if result.technologies else "-")
+    table.add_row("Errors", str(len(result.errors)))
+    table.add_row("Time", f"{result.elapsed:.1f}s")
+    console.print(table)
+
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    crawl_file = out_path / f"crawl_{target.replace('https://', '').replace('http://', '').replace('/', '_')}.json"
+
+    import json as json_mod
+    crawl_file.write_text(json_mod.dumps({
+        "target": result.target,
+        "urls": list(set(result.urls)),
+        "forms": [{"url": f.url, "action": f.action, "method": f.method, "inputs": f.inputs} for f in result.forms],
+        "js_files": result.js_files,
+        "endpoints": [{"url": e.url, "method": e.method, "source": e.source} for e in result.endpoints],
+        "technologies": result.technologies,
+    }, indent=2))
+    console.print(f"\n[green]Crawl data saved to {crawl_file}[/green]")
+
+
+@app.command("intruder")
+def cmd_intruder(
+    target: str = typer.Option(..., "--target", "-t", help="Target URL with §position§ markers"),
+    method: str = typer.Option("GET", "--method", "-m", help="HTTP method"),
+    attack: str = typer.Option("sniper", "--attack", "-a", help="Attack type: sniper|battering_ram|pitchfork|cluster_bomb"),
+    payload_set: str = typer.Option("sqli", "--payloads", "-P", help="Payload set: sqli|xss|traversal|ssti|nosql|commands|common_passwords|idor"),
+    payload_file: Optional[str] = typer.Option(None, "--payload-file", help="Custom payload file (one per line)"),
+    threads: int = typer.Option(10, "--threads", help="Concurrent threads"),
+    delay: float = typer.Option(0.0, "--delay", help="Delay between requests (seconds)"),
+    grep: Optional[str] = typer.Option(None, "--grep", help="Regex pattern to grep in responses"),
+    output_dir: str = typer.Option("./vapt-reports", "--output", "-o", help="Output directory"),
+) -> None:
+    """Fuzzing engine — Burp Intruder replacement with 4 attack modes."""
+    from vapt.engine.intruder import BUILTIN_PAYLOADS, Intruder, IntruderConfig, PayloadGenerator
+
+    print_banner()
+
+    if payload_file:
+        payloads = [PayloadGenerator.from_file(payload_file)]
+    else:
+        payloads = [BUILTIN_PAYLOADS.get(payload_set, BUILTIN_PAYLOADS["sqli"])]
+
+    marker = "§"
+    positions = []
+    i = 0
+    while i < len(target):
+        start = target.find(marker, i)
+        if start == -1:
+            break
+        end = target.find(marker, start + 1)
+        if end == -1:
+            break
+        positions.append(target[start + 1 : end])
+        i = end + 1
+
+    console.print(f"\n[bold]Intruder Attack[/bold]")
+    console.print(f"Target: [cyan]{target}[/cyan]")
+    console.print(f"Mode: [yellow]{attack}[/yellow] | Positions: {len(positions)} | Payloads: {len(payloads[0])}")
+
+    config = IntruderConfig(
+        base_url=target,
+        method=method,
+        positions=positions,
+        payloads=payloads,
+        attack_type=attack,
+        threads=threads,
+        delay=delay,
+        grep_patterns=[grep] if grep else [],
+    )
+
+    intruder = Intruder(config)
+
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"), TimeElapsedColumn(), console=console) as prog:
+        task = prog.add_task("Fuzzing...", total=None)
+
+        def on_progress(current, total, result):
+            status = f"[{'red' if result.interesting else 'dim'}]{result.status_code}[/]"
+            prog.update(task, description=f"[{current}/{total}] {status} {result.payload[:40]}")
+
+        results = intruder.run(progress_callback=on_progress)
+
+    summary = intruder.summary()
+    interesting = intruder.get_interesting()
+
+    console.print(f"\n[bold green]Complete:[/bold green] {summary['total_requests']} requests, "
+                  f"[bold red]{summary['interesting_count']} interesting[/bold red], "
+                  f"{summary['error_count']} errors")
+
+    if interesting:
+        table = Table(title="Interesting Results", show_header=True)
+        table.add_column("#", style="dim")
+        table.add_column("Payload", style="cyan")
+        table.add_column("Status", style="yellow")
+        table.add_column("Length", style="green")
+        table.add_column("Notes", style="red")
+        for idx, r in enumerate(interesting[:30], 1):
+            table.add_row(str(idx), r.payload[:50], str(r.status_code),
+                          str(r.content_length), "; ".join(r.notes))
+        console.print(table)
+
+
+@app.command("sequencer")
+def cmd_sequencer(
+    url: str = typer.Option(..., "--url", "-u", help="URL that generates tokens"),
+    extract_from: str = typer.Option("cookie", "--from", help="Where to extract: header|cookie|body"),
+    extract_name: str = typer.Option("session", "--name", "-n", help="Header/cookie name to extract"),
+    extract_regex: Optional[str] = typer.Option(None, "--regex", help="Regex to extract token (group 1)"),
+    sample_size: int = typer.Option(200, "--samples", "-s", help="Number of tokens to collect"),
+    delay: float = typer.Option(0.1, "--delay", help="Delay between requests"),
+) -> None:
+    """Token randomness analyzer — Burp Sequencer replacement."""
+    from vapt.engine.sequencer import Sequencer
+
+    print_banner()
+    console.print(f"\n[bold]Sequencer: Analyzing token randomness[/bold]")
+    console.print(f"URL: [cyan]{url}[/cyan]")
+    console.print(f"Extract from: [yellow]{extract_from}[/yellow] → {extract_name}\n")
+
+    seq = Sequencer(
+        url, extract_from=extract_from, extract_name=extract_name,
+        extract_regex=extract_regex, sample_size=sample_size, delay=delay,
+    )
+
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"), TimeElapsedColumn(), console=console) as prog:
+        task = prog.add_task("Collecting tokens...", total=sample_size)
+
+        def on_progress(current, total):
+            prog.update(task, completed=current, description=f"Collecting [{current}/{total}]")
+
+        result = seq.analyze(tokens=seq.collect(progress_callback=on_progress))
+
+    table = Table(title="Sequencer Results", show_header=True)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Samples collected", str(result.sample_size))
+    table.add_row("Shannon entropy", f"{result.entropy_per_char:.4f}")
+    table.add_row("Max possible entropy", f"{result.max_entropy:.4f}")
+    table.add_row("Entropy ratio", f"{result.entropy_ratio:.4f}")
+    table.add_row("Chi-squared", f"{result.chi_squared:.2f}")
+    table.add_row("Monobit ratio", f"{result.monobit_ratio:.4f}")
+    table.add_row("Runs score", f"{result.runs_score:.4f}")
+
+    rating_colors = {"excellent": "green", "good": "green", "fair": "yellow", "poor": "red", "critical": "bold red"}
+    color = rating_colors.get(result.rating, "white")
+    table.add_row("Overall score", f"[bold]{result.overall_score:.1f}/100[/bold]")
+    table.add_row("Rating", f"[{color}]{result.rating.upper()}[/{color}]")
+    console.print(table)
+
+    if result.warnings:
+        console.print("\n[bold yellow]Warnings:[/bold yellow]")
+        for w in result.warnings:
+            console.print(f"  [yellow]⚠ {w}[/yellow]")
+
+
+@app.command("codec")
+def cmd_codec(
+    data: str = typer.Argument(..., help="Data to encode/decode"),
+    operation: str = typer.Option("smart", "--op", "-o", help="Operation: b64e|b64d|urle|urld|hexe|hexd|htmle|htmld|jwtd|hashid|smart|md5|sha256"),
+) -> None:
+    """Encoder, decoder, and hash identification utility."""
+    from vapt.utils.codec import Codec
+    import json as json_mod
+
+    ops = {
+        "b64e": ("Base64 Encode", lambda d: Codec.encode_base64(d)),
+        "b64d": ("Base64 Decode", lambda d: Codec.decode_base64(d)),
+        "urle": ("URL Encode", lambda d: Codec.encode_url(d)),
+        "urld": ("URL Decode", lambda d: Codec.decode_url(d)),
+        "hexe": ("Hex Encode", lambda d: Codec.encode_hex(d)),
+        "hexd": ("Hex Decode", lambda d: Codec.decode_hex(d)),
+        "htmle": ("HTML Encode", lambda d: Codec.encode_html(d)),
+        "htmld": ("HTML Decode", lambda d: Codec.decode_html(d)),
+        "jwtd": ("JWT Decode", lambda d: json_mod.dumps(Codec.decode_jwt(d), indent=2)),
+        "hashid": ("Hash Identify", lambda d: ", ".join(Codec.identify_hash(d))),
+        "smart": ("Smart Decode", lambda d: json_mod.dumps(Codec.smart_decode(d), indent=2, default=str)),
+        "md5": ("MD5 Hash", lambda d: Codec.hash_string(d, "md5")),
+        "sha256": ("SHA-256 Hash", lambda d: Codec.hash_string(d, "sha256")),
+        "all": ("All Encodings", lambda d: json_mod.dumps(Codec.encode_all(d), indent=2)),
+    }
+
+    if operation not in ops:
+        console.print(f"[red]Unknown operation: {operation}[/red]")
+        console.print(f"Available: {', '.join(ops.keys())}")
+        raise typer.Exit(1)
+
+    name, func = ops[operation]
+    try:
+        result = func(data)
+        console.print(f"[bold]{name}:[/bold]")
+        console.print(result)
+    except Exception as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+
+
 # Entry point
 
 def entry_point() -> None:
