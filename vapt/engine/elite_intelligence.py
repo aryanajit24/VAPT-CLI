@@ -11,8 +11,6 @@ from pathlib import Path
 
 
 # COMMONLY DUPLICATED VULNERABILITY PATTERNS
-# These are what every researcher and automated tool finds first.
-# Findings matching these patterns get HIGH duplicate_risk scores.
 
 COMMON_DUPLICATES = {
     "missing_security_headers": {
@@ -137,7 +135,7 @@ COMMON_DUPLICATES = {
 }
 
 # HIGH-VALUE FINDING PATTERNS
-# These are what the top 1% of bounty hunters find — rarely duplicated.
+# Rarely duplicated — require manual analysis or auth
 
 HIGH_VALUE_PATTERNS = {
     "idor_financial": {
@@ -264,7 +262,6 @@ HIGH_VALUE_PATTERNS = {
 }
 
 # POC COMPLETENESS REQUIREMENTS
-# Each vulnerability type needs specific PoC elements to be accepted.
 
 POC_REQUIREMENTS = {
     "cors": {
@@ -354,7 +351,6 @@ POC_REQUIREMENTS = {
 }
 
 # SENSITIVE ENDPOINT PATTERNS
-# Endpoints that handle money, PII, or auth are the highest priority targets.
 
 SENSITIVE_ENDPOINT_PATTERNS = {
     "financial": {
@@ -418,7 +414,7 @@ SENSITIVE_ENDPOINT_PATTERNS = {
     },
 }
 
-# PROGRAM RESPONSE PATTERNS — learn from H1/Bugcrowd analyst responses
+# PROGRAM RESPONSE PATTERNS — based on H1/Bugcrowd triager behavior
 
 PROGRAM_RESPONSE_INTELLIGENCE = {
     "informative_patterns": [
@@ -502,25 +498,13 @@ class EliteIntelligenceEngine:
         target_context = target_context or {}
         
         for finding in findings:
-            # Phase 1: Score novelty
             finding["novelty_score"] = self._score_novelty(finding)
-            
-            # Phase 2: Assess duplicate risk
             finding["duplicate_risk"] = self._assess_duplicate_risk(finding)
-            
-            # Phase 3: Check PoC completeness
             finding["poc_completeness"] = self._check_poc_completeness(finding)
-            
-            # Phase 4: Identify chain potential
             finding["chain_potential"] = self._find_chain_potential(finding, findings)
-            
-            # Phase 5: Calculate submission readiness
             finding["submission_readiness"] = self._assess_submission_readiness(finding)
-            
-            # Phase 6: Generate recommendation
             finding["elite_recommendation"] = self._generate_recommendation(finding)
         
-        # Phase 7: Rank by priority
         findings = self._rank_findings(findings)
         
         return findings
@@ -623,7 +607,6 @@ class EliteIntelligenceEngine:
         if severity in ("info", "low"):
             risk = min(1.0, risk + 0.15)
         
-        # If we know the program has been running for years, increase risk
         program_age_months = finding.get("_program_age_months", 12)
         if program_age_months > 24:
             risk = min(1.0, risk + 0.10)
@@ -641,7 +624,6 @@ class EliteIntelligenceEngine:
         score = 0.0
         category = finding.get("category", "").lower()
         
-        # Find the closest PoC requirement category
         poc_req = None
         for poc_cat, requirements in POC_REQUIREMENTS.items():
             if poc_cat in category or category in poc_cat:
@@ -663,35 +645,29 @@ class EliteIntelligenceEngine:
                 score += 0.15
             return min(1.0, score)
         
-        # Check specific requirements
         evidence = finding.get("evidence", {})
         evidence_text = json.dumps(evidence).lower() if evidence else ""
         description = finding.get("description", "").lower()
         full_text = f"{evidence_text} {description}"
         
-        # Has the basic evidence
         if evidence:
             score += 0.25
         
-        # Has request/response pair
         if finding.get("request") and finding.get("response"):
             score += 0.25
         elif finding.get("request") or finding.get("response"):
             score += 0.10
         
-        # Check for insufficient PoC indicators
         for insufficient in poc_req["insufficient"]:
             if insufficient.lower() in full_text:
                 score -= 0.20
         
-        # Has steps to reproduce
         steps = finding.get("steps_to_reproduce", [])
         if isinstance(steps, list) and len(steps) >= 3:
             score += 0.25
         elif isinstance(steps, list) and len(steps) >= 1:
             score += 0.10
         
-        # Has impact demonstration
         if finding.get("impact") and len(str(finding["impact"])) > 50:
             score += 0.25
         
@@ -793,7 +769,6 @@ class EliteIntelligenceEngine:
         poc = finding.get("poc_completeness", 0)
         chains = finding.get("chain_potential", [])
         
-        # Automatic skip conditions
         if dup_risk >= 0.90:
             return "skip"
         
@@ -801,19 +776,16 @@ class EliteIntelligenceEngine:
         if severity in ("info", "low") and not chains:
             return "skip"
         
-        # Ready conditions
         if novelty >= 0.60 and dup_risk < 0.50 and poc >= 0.60:
             return "ready"
         
-        # Has chains that could elevate it
         if chains and novelty >= 0.40:
             return "needs_work"
         
-        # Decent novelty but needs better PoC
         if novelty >= 0.50 and poc < 0.50:
             return "needs_work"
         
-        # High dup risk but might still be worth it if severity is critical
+        # Critical severity overrides moderate dup risk
         if severity == "critical" and dup_risk < 0.70:
             return "needs_work"
         
@@ -885,10 +857,8 @@ class EliteIntelligenceEngine:
             )
             finding["_priority_score"] = priority_score
         
-        # Sort by priority score (highest first)
         findings.sort(key=lambda f: f.get("_priority_score", 0), reverse=True)
         
-        # Assign rank
         for idx, finding in enumerate(findings, 1):
             finding["priority_rank"] = idx
         

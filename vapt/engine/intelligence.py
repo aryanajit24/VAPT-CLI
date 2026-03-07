@@ -31,8 +31,6 @@ CVSS_RANGES = {
     "info": (0.0, 0.0),
 }
 
-# Each chain: (finding_A_pattern, finding_B_pattern, chain_title, impact, severity)
-
 ATTACK_CHAINS = [
     # Auth chains
     {
@@ -190,25 +188,18 @@ class IntelligenceEngine:
         """
         context = target_context or {}
 
-        # Phase 1: Enrich each finding with KB data
         enriched = [self._enrich_finding(f) for f in findings]
 
-        # Phase 2: Deep severity analysis — adjust severity based on context
         enriched = [self._analyze_severity(f, context) for f in enriched]
 
-        # Phase 3: False positive elimination
         confirmed = self._eliminate_false_positives(enriched)
 
-        # Phase 4: Detect attack chains
         chains = self._detect_chains(confirmed, context)
 
-        # Phase 5: Impact assessment
         confirmed = [self._assess_impact(f) for f in confirmed]
 
-        # Phase 6: Generate risk summary
         risk_summary = self._generate_risk_summary(confirmed, chains)
 
-        # Phase 7: Generate recommendations
         recommendations = self._generate_recommendations(confirmed, chains)
 
         return {
@@ -226,13 +217,12 @@ class IntelligenceEngine:
 
         kb_entry = self._kb_cache.get(vuln_id)
         if kb_entry:
-            # Merge KB fields (scanner data wins on conflicts)
+            # Scanner data wins on conflicts
             for key in ("cwe", "owasp", "detection", "validation", "impact",
                         "remediation", "is_critical_when", "is_not_critical_when"):
                 if key in kb_entry and key not in enriched:
                     enriched[f"kb_{key}"] = kb_entry[key]
 
-            # Always add these as metadata
             enriched["kb_matched"] = True
             enriched["kb_vuln_id"] = vuln_id
         else:
@@ -258,7 +248,6 @@ class IntelligenceEngine:
         url = (finding.get("url") or "").lower()
         vuln_id = finding.get("vuln_id", "")
 
-        # Check critical upgrade conditions
         upgrade_reason = self._check_severity_upgrade(
             finding, evidence, title, url, context,
         )
@@ -268,7 +257,7 @@ class IntelligenceEngine:
             enriched["severity_reason"] = upgrade_reason
             enriched["severity_adjusted"] = True
 
-        # Check downgrade conditions (scanner over-classified)
+        # Scanner may have over-classified
         downgrade_reason = self._check_severity_downgrade(
             finding, evidence, title, url, context,
         )
@@ -282,7 +271,6 @@ class IntelligenceEngine:
             elif severity == "high":
                 enriched["severity"] = "medium"
 
-        # KB-based severity adjustment
         kb_critical_when = finding.get("kb_is_critical_when", "")
         if kb_critical_when and severity != "critical":
             conditions = kb_critical_when.split(";")
@@ -308,28 +296,23 @@ class IntelligenceEngine:
         """Check if a finding deserves severity upgrade."""
         severity = (finding.get("severity") or "info").lower()
 
-        # Critical impact evidence in finding
         for pattern in CRITICAL_IMPACT_KEYWORDS:
             if re.search(pattern, evidence, re.IGNORECASE):
                 return f"Critical data exposed: matches '{pattern}' in evidence"
 
-        # Actuator endpoints with sensitive data
         if "actuator" in title or "actuator" in evidence:
             for sensitive in ("env", "configprops", "heapdump", "shutdown"):
                 if sensitive in evidence or sensitive in url:
                     return f"Spring Boot actuator /{sensitive} exposes sensitive configuration"
 
-        # No authentication on sensitive endpoint
         if "no auth" in evidence or "without authentication" in evidence:
             if any(kw in title.lower() for kw in ("admin", "database", "redis", "mongo", "elastic")):
                 return "Critical service accessible without authentication"
 
-        # WAF bypass confirmed
         if "bypass" in title.lower() or "bypass" in evidence:
             if severity in ("medium", "low", "info"):
                 return "WAF bypass confirmed — security control circumvented"
 
-        # Payment endpoints affected
         for pattern in PAYMENT_KEYWORDS:
             if re.search(pattern, url, re.IGNORECASE) or re.search(pattern, evidence, re.IGNORECASE):
                 if severity in ("medium", "high"):
@@ -349,7 +332,6 @@ class IntelligenceEngine:
         severity = (finding.get("severity") or "info").lower()
         vuln_id = finding.get("vuln_id", "")
 
-        # KB "not critical when" rules
         kb_not_critical = finding.get("kb_is_not_critical_when", "")
         if kb_not_critical and severity == "critical":
             conditions = kb_not_critical.split(";")
@@ -358,18 +340,15 @@ class IntelligenceEngine:
                 if condition and condition in evidence:
                     return f"KB downgrade rule: {condition}"
 
-        # Health-only actuator is not critical
         if "actuator" in title.lower() and "health" in evidence:
             if "env" not in evidence and "heapdump" not in evidence and "configprops" not in evidence:
                 if severity == "critical":
                     return "Actuator health-only exposure is informational, not critical"
 
-        # Missing security headers alone are not High
         if "header" in title.lower() and "missing" in title.lower():
             if severity in ("high", "critical"):
                 return "Missing security headers are Medium at most without demonstrated exploit"
 
-        # Info disclosure without sensitive data
         if "disclosure" in title.lower() or "information" in title.lower():
             has_sensitive = any(
                 re.search(p, evidence, re.IGNORECASE)
@@ -378,7 +357,6 @@ class IntelligenceEngine:
             if not has_sensitive and severity in ("high", "critical"):
                 return "Information disclosure without sensitive data exposure"
 
-        # Generic error messages
         if "error" in evidence and "stack" not in evidence and "sql" not in evidence:
             if severity == "high":
                 return "Generic error messages without stack trace are Low severity"
@@ -410,7 +388,6 @@ class IntelligenceEngine:
         title = (finding.get("title") or "").lower()
         vuln_id = (finding.get("vuln_id") or "")
 
-        # Check category-specific FP rules
         for fp_category, rules in fp_rules.items():
             if fp_category in category or fp_category in vuln_id.lower():
                 indicators = rules.get("false_if", [])
@@ -419,7 +396,6 @@ class IntelligenceEngine:
                         finding["_fp_reason"] = f"FP rule [{fp_category}]: {indicator}"
                         return True
 
-        # Generic FP patterns
         if self._is_generic_fp(finding):
             return True
 
@@ -430,22 +406,18 @@ class IntelligenceEngine:
         evidence = (finding.get("evidence") or "").lower()
         confidence = finding.get("confidence", 0.5)
 
-        # Very low confidence findings
         if confidence < 0.3:
             finding["_fp_reason"] = f"Confidence too low: {confidence}"
             return True
 
-        # Empty evidence
         if not evidence.strip():
             finding["_fp_reason"] = "No evidence provided"
             return True
 
-        # WAF/honeypot detection pages
         waf_indicators = ["captcha", "challenge", "blocked by", "access denied",
                           "cloudflare", "akamai", "incapsula"]
         if any(ind in evidence for ind in waf_indicators):
             if finding.get("severity", "").lower() in ("critical", "high"):
-                # WAF may be causing false response
                 finding["_fp_reason"] = "WAF/CDN interference detected in evidence"
                 return True
 
@@ -495,7 +467,6 @@ class IntelligenceEngine:
             if not matched and not req.get("optional"):
                 return None  # Required component missing
 
-        # Check additional conditions
         conditions = chain_def.get("conditions", [])
         for condition in conditions:
             if condition == "database_accessible":
@@ -553,7 +524,6 @@ class IntelligenceEngine:
 
         impacts = []
 
-        # Check for data breach potential
         data_patterns = {
             "PII exposure": [r"email", r"phone", r"address", r"name", r"user"],
             "Credential leak": [r"password", r"token", r"secret", r"api.key", r"session"],
@@ -568,7 +538,6 @@ class IntelligenceEngine:
                     impacts.append(impact_type)
                     break
 
-        # Assess scope
         if severity == "critical":
             enriched["business_impact"] = "CRITICAL — Immediate remediation required"
             if impacts:
@@ -601,14 +570,13 @@ class IntelligenceEngine:
         total = len(findings)
         chain_count = len(chains)
 
-        # Calculate risk score (weighted)
         raw_score = (
             severity_counts["critical"] * 10
             + severity_counts["high"] * 7
             + severity_counts["medium"] * 4
             + severity_counts["low"] * 1
         )
-        # Chain bonus — chains significantly increase risk
+        # Chains compound risk significantly
         raw_score += chain_count * 15
         overall_score = min(raw_score, 100)
 

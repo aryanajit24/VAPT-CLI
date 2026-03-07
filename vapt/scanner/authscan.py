@@ -14,8 +14,6 @@ from bs4 import BeautifulSoup
 
 from vapt.utils.helpers import sanitize_target
 
-# Default / Common Credentials
-
 DEFAULT_CREDS = [
     ("admin", "admin"), ("admin", "password"), ("admin", "123456"),
     ("admin", "admin123"), ("root", "root"), ("root", "toor"),
@@ -24,8 +22,6 @@ DEFAULT_CREDS = [
     ("admin", ""), ("root", ""), ("admin", "admin1234"),
     ("admin", "P@ssw0rd"), ("admin", "changeme"),
 ]
-
-# Auth-related Endpoint Patterns
 
 AUTH_ENDPOINTS = {
     "login": [
@@ -85,10 +81,8 @@ class AuthScanner:
 
         sc = self.safety_config
 
-        # Discover endpoints
         endpoints = self._discover_endpoints(target)
 
-        # Always-safe checks (read-only / passive)
         self._check_csrf(target)
         self._check_cors(target)
         self._check_idor(target, endpoints)
@@ -99,7 +93,7 @@ class AuthScanner:
         self._check_host_header_injection(target, endpoints)
         self._check_privilege_escalation(target, endpoints)
 
-        # SAFETY GATED — these are dangerous on real systems
+        # these modify state on target
         if not sc.get("skip_default_creds") and not sc.get("skip_brute_force"):
             self._check_default_creds(target, endpoints)
         if not sc.get("skip_mfa_bypass"):
@@ -135,7 +129,6 @@ class AuthScanner:
             resp = self.session.get(target, timeout=self.timeout)
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            # Find POST forms
             forms = soup.find_all("form", method=re.compile(r"post", re.IGNORECASE))
             if not forms:
                 forms = [f for f in soup.find_all("form") if not f.get("method") or f.get("method", "").lower() != "get"]
@@ -144,7 +137,6 @@ class AuthScanner:
                 action = form.get("action", "")
                 abs_action = urljoin(target, action) if action else target
 
-                # Check for CSRF token
                 has_csrf = False
                 csrf_names = ["csrf", "token", "_token", "authenticity_token",
                               "csrfmiddlewaretoken", "csrf_token", "__RequestVerificationToken",
@@ -156,13 +148,11 @@ class AuthScanner:
                         has_csrf = True
                         break
 
-                # Check meta tags too
                 meta_csrf = soup.find("meta", attrs={"name": re.compile(r"csrf", re.IGNORECASE)})
                 if meta_csrf:
                     has_csrf = True
 
                 if not has_csrf:
-                    # Get form fields for evidence
                     fields = [inp.get("name", "unnamed") for inp in form.find_all(["input", "textarea", "select"])]
                     state_changing = any(f in str(fields).lower() for f in
                         ["password", "email", "delete", "update", "transfer",
@@ -278,11 +268,9 @@ class AuthScanner:
 
         for url in login_urls[:3]:
             try:
-                # Get login page to find form structure
                 resp = self.session.get(url, timeout=self.timeout)
                 soup = BeautifulSoup(resp.text, "html.parser")
 
-                # Find login form
                 forms = soup.find_all("form")
                 form = None
                 for f in forms:
@@ -294,7 +282,6 @@ class AuthScanner:
                 if not form:
                     continue
 
-                # Extract field names
                 user_field = None
                 pass_field = None
                 for inp in form.find_all("input"):
@@ -310,7 +297,6 @@ class AuthScanner:
 
                 action = urljoin(url, form.get("action", ""))
 
-                # Extract CSRF token if present
                 csrf_field = None
                 csrf_value = None
                 for inp in form.find_all("input", type="hidden"):
@@ -320,7 +306,6 @@ class AuthScanner:
                         csrf_value = inp.get("value", "")
                         break
 
-                # Test default credentials
                 for username, password in DEFAULT_CREDS[:8]:
                     data = {user_field: username, pass_field: password}
                     if csrf_field:
@@ -333,7 +318,6 @@ class AuthScanner:
                             allow_redirects=False,
                         )
 
-                        # Detect successful login
                         is_success = False
                         if login_resp.status_code in (301, 302, 303):
                             location = login_resp.headers.get("Location", "")
@@ -375,11 +359,9 @@ class AuthScanner:
         profile_urls = endpoints.get("profile", [])
 
         for url in profile_urls:
-            # Test sequential IDs
             parsed = urlparse(url)
             path = parsed.path
 
-            # Try to detect numeric IDs in path
             id_pattern = re.search(r"/(\d+)/?$", path)
             if id_pattern:
                 original_id = int(id_pattern.group(1))
@@ -397,7 +379,6 @@ class AuthScanner:
                     try:
                         resp = self.session.get(test_url, timeout=self.timeout)
 
-                        # If we can access other user's data
                         if (resp.status_code == 200
                             and abs(len(resp.text) - original_length) > 50
                             and resp.status_code != 404):
@@ -432,14 +413,12 @@ class AuthScanner:
         try:
             resp = self.session.get(target, timeout=self.timeout)
 
-            # Look for JWT in cookies
             jwt_cookie = None
             for cookie in self.session.cookies:
                 if re.match(r"eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.", cookie.value):
                     jwt_cookie = (cookie.name, cookie.value)
                     break
 
-            # Look for JWT in response
             jwt_in_body = re.search(
                 r"(eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+)",
                 resp.text,
@@ -466,15 +445,12 @@ class AuthScanner:
             return
 
         try:
-            # Decode header
             header_b64 = parts[0] + "=" * (4 - len(parts[0]) % 4)
             header = json.loads(base64.urlsafe_b64decode(header_b64))
 
-            # Decode payload
             payload_b64 = parts[1] + "=" * (4 - len(parts[1]) % 4)
             payload = json.loads(base64.urlsafe_b64decode(payload_b64))
 
-            # Check 1: Weak algorithm
             alg = header.get("alg", "")
             if alg in ("none", "None", "NONE", "nOnE"):
                 self._add_finding(
@@ -492,7 +468,6 @@ class AuthScanner:
                 )
 
             if alg in ("HS256", "HS384", "HS512"):
-                # Check for weak secrets
                 weak_secrets = ["secret", "password", "key", "jwt", "123456", "changeme",
                                 "admin", "test", "default"]
                 import hmac
@@ -523,7 +498,6 @@ class AuthScanner:
                     except Exception:
                         continue
 
-            # Check 2: Sensitive data in payload
             sensitive_keys = ["password", "secret", "ssn", "credit_card", "cc_number"]
             exposed = [k for k in payload.keys() if any(s in k.lower() for s in sensitive_keys)]
             if exposed:
@@ -541,7 +515,6 @@ class AuthScanner:
                     poc=f"1. Get JWT from cookie/response\n2. Base64-decode middle section\n3. Sensitive fields visible: {', '.join(exposed)}",
                 )
 
-            # Check 3: No expiration
             if "exp" not in payload:
                 self._add_finding(
                     vuln_id="AUTH-005",
@@ -567,7 +540,6 @@ class AuthScanner:
 
         for url in login_urls[:2]:
             try:
-                # Get pre-auth session
                 pre_session = requests.Session()
                 resp1 = pre_session.get(url, timeout=self.timeout)
                 pre_cookies = dict(pre_session.cookies)
@@ -575,7 +547,7 @@ class AuthScanner:
                 if not pre_cookies:
                     continue
 
-                # Simulate login (we can't actually auth, but check behavior)
+                # can't actually auth here, just check cookie flags
                 for cookie in pre_session.cookies:
                     flags = []
                     if not cookie.secure:
@@ -619,7 +591,6 @@ class AuthScanner:
                 for form in forms:
                     inputs = [i.get("name", "").lower() for i in form.find_all("input")]
                     if any("email" in i or "user" in i for i in inputs):
-                        # Found reset form — check for Host header injection
                         action = urljoin(url, form.get("action", url))
 
                         email_field = None
@@ -630,7 +601,6 @@ class AuthScanner:
                                 break
 
                         if email_field:
-                            # Test Host header injection
                             try:
                                 resp2 = self.session.post(
                                     action,
@@ -672,14 +642,12 @@ class AuthScanner:
         """Check for OAuth/OIDC misconfigurations."""
         oauth_urls = endpoints.get("oauth", [])
 
-        # Check OpenID Configuration
         well_known_url = urljoin(target, "/.well-known/openid-configuration")
         try:
             resp = self.session.get(well_known_url, timeout=self.timeout)
             if resp.status_code == 200:
                 try:
                     config = resp.json()
-                    # Check for insecure response types
                     response_types = config.get("response_types_supported", [])
                     if "token" in response_types:
                         self._add_finding(
@@ -702,12 +670,10 @@ class AuthScanner:
         except Exception:
             pass
 
-        # Test redirect_uri manipulation
         for url in oauth_urls:
             try:
                 parsed = urlparse(url)
                 if "authorize" in parsed.path:
-                    # Test open redirect in redirect_uri
                     test_params = {
                         "client_id": "test",
                         "redirect_uri": "https://evil.com/callback",
@@ -753,7 +719,6 @@ class AuthScanner:
                 if resp.status_code in (404, 502, 503):
                     continue
 
-                # Test: can we access protected resources without completing 2FA?
                 for admin_path in ["/admin", "/dashboard", "/api/me", "/api/user"]:
                     admin_url = urljoin(target, admin_path)
                     try:
@@ -788,7 +753,6 @@ class AuthScanner:
 
         for url in admin_urls:
             try:
-                # Try accessing admin endpoints without auth
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp.status_code == 200:
                     body = resp.text.lower()
@@ -828,7 +792,6 @@ class AuthScanner:
 
         for url in profile_urls[:3]:
             try:
-                # Test: can we update other user's email?
                 resp = self.session.put(
                     url,
                     json={"email": "attacker@evil.com", "role": "admin"},

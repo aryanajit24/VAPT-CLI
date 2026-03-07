@@ -15,42 +15,31 @@ from xml.etree import ElementTree
 
 
 SECRET_PATTERNS = [
-    # AWS
     (r"AKIA[A-Z0-9]{16}", "AWS Access Key"),
     (r"(?:aws_secret_access_key|AWS_SECRET)\s*[=:]\s*['\"]?([A-Za-z0-9/+=]{40})", "AWS Secret Key"),
-    # Google
     (r"AIza[a-zA-Z0-9_-]{35}", "Google API Key"),
     (r"[0-9]+-[a-z0-9_]{32}\.apps\.googleusercontent\.com", "Google OAuth Client"),
-    # Firebase
     (r"[a-zA-Z0-9_-]+\.firebaseio\.com", "Firebase Database URL"),
     (r"[a-zA-Z0-9_-]+\.firebaseapp\.com", "Firebase App URL"),
-    # Stripe
     (r"sk_live_[a-zA-Z0-9]{24,}", "Stripe Secret Key"),
     (r"pk_live_[a-zA-Z0-9]{24,}", "Stripe Publishable Key"),
     (r"rk_live_[a-zA-Z0-9]{24,}", "Stripe Restricted Key"),
-    # Generic
     (r"-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----", "Private Key"),
     (r"-----BEGIN CERTIFICATE-----", "Certificate"),
     (r"Bearer\s+eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+", "JWT Token"),
-    # API keys in common formats
     (r"(?:api[_-]?key|apikey|api_secret)\s*[=:]\s*['\"]([a-zA-Z0-9_-]{16,})['\"]", "API Key"),
     (r"(?:password|passwd|pwd)\s*[=:]\s*['\"]([^'\"]{6,})['\"]", "Hardcoded Password"),
     (r"(?:secret|token)\s*[=:]\s*['\"]([a-zA-Z0-9_/+=.:-]{16,})['\"]", "Secret/Token"),
-    # Cloud
+
     (r"https?://[^/]*\.s3\.amazonaws\.com", "S3 Bucket URL"),
     (r"https?://storage\.googleapis\.com/[a-zA-Z0-9._-]+", "GCS Bucket URL"),
-    # Twilio
     (r"SK[a-f0-9]{32}", "Twilio API Key"),
     (r"AC[a-f0-9]{32}", "Twilio Account SID"),
-    # Slack
     (r"xox[bpors]-[0-9]{10,}-[a-zA-Z0-9-]+", "Slack Token"),
-    # GitHub
     (r"gh[ps]_[A-Za-z0-9_]{36,}", "GitHub Token"),
-    # SendGrid
     (r"SG\.[a-zA-Z0-9_.-]{22,}\.[a-zA-Z0-9_.-]{22,}", "SendGrid API Key"),
 ]
 
-# Patterns that are usually false positives (example code, tests, etc.)
 FP_INDICATORS = [
     "example", "test", "sample", "dummy", "placeholder",
     "your_api_key", "xxx", "INSERT_", "CHANGE_ME", "<your",
@@ -85,19 +74,15 @@ class MobileScanner:
 
         return {"findings": self.findings}
 
-    # ANDROID APK ANALYSIS
-
     def _scan_android(self, apk_path: Path) -> None:
         """Full static analysis of Android APK."""
         tmpdir = tempfile.mkdtemp(prefix="vapt_apk_")
         try:
-            # Extract APK (it's a ZIP)
             with zipfile.ZipFile(apk_path, "r") as zf:
                 zf.extractall(tmpdir)
 
             extracted = Path(tmpdir)
 
-            # Parse AndroidManifest.xml (try plaintext first, then binary)
             manifest = self._parse_android_manifest(extracted, apk_path)
             if manifest:
                 self._check_exported_components(manifest, apk_path)
@@ -107,18 +92,14 @@ class MobileScanner:
                 self._check_deeplinks(manifest, apk_path)
                 self._check_permissions(manifest, apk_path)
 
-            # Decompile with jadx if available
             source_dir = self._decompile_with_jadx(apk_path, tmpdir)
 
-            # Search for secrets in all text content
             self._search_secrets_in_dir(
                 source_dir or extracted, apk_path, "android"
             )
 
-            # Check network security config
             self._check_network_security_config(extracted, apk_path)
 
-            # Check for WebView usage patterns
             if source_dir:
                 self._check_webview_android(source_dir, apk_path)
 
@@ -127,19 +108,16 @@ class MobileScanner:
 
     def _parse_android_manifest(self, extracted: Path, apk_path: Path) -> ElementTree.Element | None:
         """Parse AndroidManifest.xml from extracted APK."""
-        # Try to use aapt2 or aapt for binary XML
         manifest_path = extracted / "AndroidManifest.xml"
         if not manifest_path.exists():
             return None
 
-        # Try parsing as plaintext XML first
         try:
             tree = ElementTree.parse(manifest_path)
             return tree.getroot()
         except ElementTree.ParseError:
             pass
 
-        # Binary XML — use aapt if available
         for tool in ("aapt2", "aapt"):
             if shutil.which(tool):
                 try:
@@ -148,13 +126,11 @@ class MobileScanner:
                         capture_output=True, text=True, timeout=30,
                     )
                     if result.returncode == 0:
-                        # Parse aapt output for key attributes
                         self._parse_aapt_manifest(result.stdout, apk_path)
                         return None  # Already processed via aapt
                 except (subprocess.SubprocessError, OSError):
                     pass
 
-        # Try apktool if available
         if shutil.which("apktool"):
             try:
                 apktool_dir = extracted / "apktool_out"
@@ -191,7 +167,6 @@ class MobileScanner:
                 category="mobile_android",
             ))
 
-        # Check for exported components
         if "exported" in lines and "true" in lines:
             self.findings.append(self._make_finding(
                 vuln_id="ANDROID-002", title="Exported Components Found",
@@ -417,13 +392,10 @@ class MobileScanner:
             pass
         return None
 
-    # iOS IPA ANALYSIS
-
     def _scan_ios(self, ipa_path: Path) -> None:
         """Full static analysis of iOS IPA."""
         tmpdir = tempfile.mkdtemp(prefix="vapt_ipa_")
         try:
-            # IPA is a ZIP file
             with zipfile.ZipFile(ipa_path, "r") as zf:
                 zf.extractall(tmpdir)
 
@@ -432,22 +404,17 @@ class MobileScanner:
             if not payload.exists():
                 return
 
-            # Find .app directory
             app_dirs = list(payload.glob("*.app"))
             if not app_dirs:
                 return
             app_dir = app_dirs[0]
 
-            # Parse Info.plist
             self._check_info_plist(app_dir, ipa_path)
 
-            # Search for secrets in all files
             self._search_secrets_in_dir(app_dir, ipa_path, "ios")
 
-            # Check binary strings
             self._check_binary_strings(app_dir, ipa_path)
 
-            # Check for entitlements
             self._check_entitlements(app_dir, ipa_path)
 
         finally:
@@ -460,7 +427,6 @@ class MobileScanner:
             return
 
         try:
-            # Try using plutil to convert to XML
             result = subprocess.run(
                 ["plutil", "-convert", "xml1", "-o", "-", str(plist_path)],
                 capture_output=True, text=True, timeout=10,
@@ -470,7 +436,6 @@ class MobileScanner:
 
             content = result.stdout
 
-            # Check ATS exceptions
             if "NSAppTransportSecurity" in content:
                 if "NSAllowsArbitraryLoads" in content and "<true/>" in content.split("NSAllowsArbitraryLoads")[1][:100]:
                     self.findings.append(self._make_finding(
@@ -492,7 +457,6 @@ class MobileScanner:
                         category="mobile_ios",
                     ))
 
-            # Check URL schemes
             if "CFBundleURLSchemes" in content:
                 schemes = re.findall(r"<string>([^<]+)</string>", content.split("CFBundleURLSchemes")[1][:500])
                 custom_schemes = [s for s in schemes if s not in ("http", "https", "mailto", "tel")]
@@ -512,11 +476,9 @@ class MobileScanner:
 
     def _check_binary_strings(self, app_dir: Path, ipa_path: Path) -> None:
         """Run strings on binary to find secrets."""
-        # Find the main binary (same name as .app directory without extension)
         app_name = app_dir.stem
         binary_path = app_dir / app_name
         if not binary_path.exists():
-            # Try finding any Mach-O binary
             for f in app_dir.iterdir():
                 if f.is_file() and not f.suffix:
                     try:
@@ -541,7 +503,6 @@ class MobileScanner:
 
     def _check_entitlements(self, app_dir: Path, ipa_path: Path) -> None:
         """Check for dangerous entitlements."""
-        # Look for embedded.mobileprovision
         provision = app_dir / "embedded.mobileprovision"
         if provision.exists():
             try:
@@ -568,8 +529,6 @@ class MobileScanner:
             except (subprocess.SubprocessError, OSError):
                 pass
 
-    # SHARED UTILITIES
-
     def _search_secrets_in_dir(self, directory: Path, target_path: Path, platform: str) -> None:
         """Recursively search for secrets in all text files."""
         text_extensions = {
@@ -581,7 +540,7 @@ class MobileScanner:
         for fpath in directory.rglob("*"):
             if not fpath.is_file() or fpath.suffix.lower() not in text_extensions:
                 continue
-            if fpath.stat().st_size > 5_000_000:  # Skip files > 5MB
+            if fpath.stat().st_size > 5_000_000:
                 continue
 
             try:
@@ -602,9 +561,8 @@ class MobileScanner:
             if not matches:
                 continue
 
-            # Filter false positives
             real_matches = []
-            for match in matches[:5]:  # Limit per pattern per file
+            for match in matches[:5]:
                 match_str = match if isinstance(match, str) else str(match)
                 if not any(fp in match_str.lower() for fp in FP_INDICATORS):
                     real_matches.append(match_str)

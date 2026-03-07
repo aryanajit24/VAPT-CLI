@@ -33,17 +33,14 @@ class AuthFlowScanner:
         self.safety_config = safety_config or {}
         self.findings: list[dict] = []
         
-        # Account sessions
         self.session_a: requests.Session | None = None  # Primary test user
         self.session_b: requests.Session | None = None  # Secondary test user (for IDOR)
         self.unauthenticated: requests.Session = requests.Session()
         self.unauthenticated.headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
         
-        # Account info
         self.account_a: dict = {}
         self.account_b: dict = {}
         
-        # Discovered endpoints and their auth requirements
         self.auth_endpoints: list[dict] = []
         self.unauth_endpoints: list[dict] = []
 
@@ -112,7 +109,6 @@ class AuthFlowScanner:
         if custom_headers:
             session.headers.update(custom_headers)
         
-        # Try common login payload formats
         login_payloads = [
             {"email": email, "password": password},
             {"username": email, "password": password},
@@ -131,7 +127,6 @@ class AuthFlowScanner:
                 )
                 
                 if resp.status_code in (200, 201):
-                    # Check for token in response
                     try:
                         data = resp.json()
                         token = (
@@ -147,11 +142,10 @@ class AuthFlowScanner:
                     except (json.JSONDecodeError, ValueError):
                         pass
                     
-                    # Check for session cookie
                     if session.cookies:
                         return session
                 
-                # Check for redirect to dashboard (common for form-based login)
+                # form-based logins often redirect on success
                 if resp.status_code in (301, 302, 303):
                     return session
                     
@@ -185,23 +179,17 @@ class AuthFlowScanner:
                 "findings": [],
             }
         
-        # Phase 1: Map authenticated vs unauthenticated access
         self._map_auth_surface(target, endpoints or [])
         
-        # Phase 2: Test authorization boundaries (IDOR / horizontal priv esc)
         if self.session_b:
             self._test_idor(target)
         
-        # Phase 3: Test privilege escalation (vertical)
         self._test_privilege_escalation(target)
         
-        # Phase 4: Test session management
         self._test_session_management(target)
         
-        # Phase 5: Test token handling
         self._test_token_handling(target)
         
-        # Phase 6: Test access control on methods
         self._test_method_access_control(target)
         
         elapsed = time.time() - started
@@ -227,7 +215,6 @@ class AuthFlowScanner:
         """
         endpoints_to_test = list(known_endpoints)
         
-        # Add common authenticated endpoints
         auth_paths = [
             "/api/me", "/api/v1/me", "/api/user", "/api/v1/user",
             "/api/profile", "/api/v1/profile",
@@ -258,18 +245,15 @@ class AuthFlowScanner:
         
         for endpoint in endpoints_to_test:
             try:
-                # Test unauthenticated
                 unauth_resp = self.unauthenticated.get(
                     endpoint, timeout=self.timeout, verify=False
                 )
                 
-                # Test authenticated (User A)
                 auth_resp = self.session_a.get(
                     endpoint, timeout=self.timeout, verify=False
                 )
                 
                 if auth_resp.status_code in (200, 201) and unauth_resp.status_code in (401, 403):
-                    # This endpoint requires auth — interesting!
                     self.auth_endpoints.append({
                         "url": endpoint,
                         "unauth_status": unauth_resp.status_code,
@@ -278,7 +262,6 @@ class AuthFlowScanner:
                         "content_type": auth_resp.headers.get("Content-Type", ""),
                     })
                 elif auth_resp.status_code in (200, 201) and unauth_resp.status_code in (200, 201):
-                    # Endpoint accessible without auth
                     self.unauth_endpoints.append({
                         "url": endpoint,
                         "status": unauth_resp.status_code,
@@ -328,24 +311,20 @@ class AuthFlowScanner:
             endpoint = ep_info["url"]
             
             try:
-                # Get User A's response
                 resp_a = self.session_a.get(endpoint, timeout=self.timeout, verify=False)
                 if resp_a.status_code != 200:
                     continue
                 
-                # Get User B's response to the SAME endpoint
                 resp_b = self.session_b.get(endpoint, timeout=self.timeout, verify=False)
                 if resp_b.status_code != 200:
                     continue
                 
-                # Compare responses — if they're identical, potential IDOR
                 if resp_a.text == resp_b.text and len(resp_a.text) > 50:
                     # Could be shared/public data — check for user-specific fields
                     try:
                         data_a = resp_a.json()
                         data_b = resp_b.json()
                         
-                        # If JSON responses are truly identical (same user data)
                         if data_a == data_b:
                             text = json.dumps(data_a).lower()
                             if any(k in text for k in [
@@ -383,13 +362,10 @@ class AuthFlowScanner:
                     except (json.JSONDecodeError, ValueError):
                         pass
                 
-                # Try extracting IDs from User A's response and accessing as B
                 ids = self._extract_resource_ids(resp_a.text)
                 for id_type, id_value in ids:
-                    # Build resource URL
                     for id_url in self._build_id_urls(endpoint, id_type, id_value):
                         try:
-                            # User B tries to access User A's resource
                             resp_b_id = self.session_b.get(
                                 id_url, timeout=self.timeout, verify=False
                             )
@@ -459,10 +435,8 @@ class AuthFlowScanner:
         """Build URLs with resource IDs for IDOR testing."""
         urls = []
         
-        # Append ID to endpoint
         urls.append(f"{base_endpoint.rstrip('/')}/{id_value}")
         
-        # Query parameter
         urls.append(f"{base_endpoint}?id={id_value}")
         urls.append(f"{base_endpoint}?{id_type}={id_value}")
         
@@ -532,13 +506,6 @@ class AuthFlowScanner:
         if not self.session_a:
             return
         
-        # Test 1: Session persistence after password change
-        # (If session is still valid after change, it's a finding)
-        
-        # Test 2: Multiple active sessions
-        # Create a second session and check if both work
-        
-        # Test 3: Session token in URL
         for ep_info in self.auth_endpoints[:5]:
             url = ep_info["url"]
             try:
@@ -597,18 +564,15 @@ class AuthFlowScanner:
         import base64
         
         try:
-            # Decode header
             header_pad = parts[0] + "=" * (4 - len(parts[0]) % 4)
             header = json.loads(base64.urlsafe_b64decode(header_pad))
             
-            # Decode payload
             payload_pad = parts[1] + "=" * (4 - len(parts[1]) % 4)
             payload = json.loads(base64.urlsafe_b64decode(payload_pad))
             
         except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
             return
         
-        # Test 1: alg=none bypass
         none_header = base64.urlsafe_b64encode(
             json.dumps({"alg": "none", "typ": "JWT"}).encode()
         ).rstrip(b"=").decode()
@@ -652,7 +616,6 @@ class AuthFlowScanner:
         except RequestException:
             pass
         
-        # Test 2: Check for sensitive data in JWT payload
         sensitive_fields = ["password", "secret", "ssn", "credit_card", "card_number"]
         for field in sensitive_fields:
             if field in json.dumps(payload).lower():

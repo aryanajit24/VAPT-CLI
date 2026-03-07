@@ -18,88 +18,46 @@ from requests.exceptions import RequestException
 from vapt.utils.helpers import sanitize_target
 
 
-# API Call Patterns — how JS code makes HTTP requests
-
 API_CALL_PATTERNS = [
-    # fetch() calls
     re.compile(r"""fetch\s*\(\s*['"`]([^'"`\s]+?)['"`]""", re.IGNORECASE),
     re.compile(r"""fetch\s*\(\s*`([^`]+?)`""", re.IGNORECASE),
-    
-    # axios calls
     re.compile(r"""axios\s*\.\s*(?:get|post|put|patch|delete|options|head)\s*\(\s*['"`]([^'"`\s]+?)['"`]""", re.IGNORECASE),
     re.compile(r"""axios\s*\(\s*\{[^}]*url\s*:\s*['"`]([^'"`]+?)['"`]""", re.IGNORECASE | re.DOTALL),
-    
-    # XMLHttpRequest
     re.compile(r"""\.open\s*\(\s*['"`]\w+['"`]\s*,\s*['"`]([^'"`\s]+?)['"`]""", re.IGNORECASE),
-    
-    # jQuery AJAX
     re.compile(r"""\$\s*\.\s*(?:ajax|get|post|put|getJSON)\s*\(\s*['"`]([^'"`\s]+?)['"`]""", re.IGNORECASE),
     re.compile(r"""url\s*:\s*['"`](\/[^'"`\s]+?)['"`]""", re.IGNORECASE),
-    
-    # Generic string paths that look like API endpoints
     re.compile(r"""['"`](\/api\/[^'"`\s]{3,100})['"`]"""),
     re.compile(r"""['"`](\/v[1-9]\/[^'"`\s]{3,100})['"`]"""),
     re.compile(r"""['"`](\/graphql[^'"`\s]*)['"`]"""),
-    
-    # Template literal paths
     re.compile(r"""`(/api/[^`\s]{3,100})`"""),
     re.compile(r"""`(/v[1-9]/[^`\s]{3,100})`"""),
-    
-    # Superagent / request
     re.compile(r"""(?:superagent|request)\s*\.\s*(?:get|post|put|patch|delete)\s*\(\s*['"`]([^'"`\s]+?)['"`]""", re.IGNORECASE),
 ]
 
-# Client-Side Router Patterns
-
 ROUTE_PATTERNS = [
-    # React Router
     re.compile(r"""<Route[^>]*path\s*=\s*['"`]([^'"`]+?)['"`]""", re.IGNORECASE),
     re.compile(r"""path\s*:\s*['"`](\/[^'"`]+?)['"`]"""),
-    
-    # Vue Router
     re.compile(r"""(?:routes|route)\s*:\s*\[[\s\S]*?path\s*:\s*['"`]([^'"`]+?)['"`]""", re.IGNORECASE),
-    
-    # Angular
     re.compile(r"""(?:path|redirectTo)\s*:\s*['"`]([^'"`]+?)['"`]"""),
-    
-    # Next.js / Nuxt
     re.compile(r"""(?:href|to|push|replace)\s*[=(]\s*['"`](\/[^'"`]+?)['"`]"""),
-    
-    # Generic navigation
     re.compile(r"""(?:navigate|redirect|router\.push|router\.replace|history\.push)\s*\(\s*['"`]([^'"`]+?)['"`]""", re.IGNORECASE),
 ]
 
-# GraphQL Patterns
-
 GRAPHQL_PATTERNS = [
-    # Query definitions
     re.compile(r"""(?:query|mutation|subscription)\s+(\w+)[\s\(]"""),
-    # gql tagged template
     re.compile(r"""gql\s*`\s*(query|mutation|subscription)\s+(\w+)"""),
-    # Fragment definitions
     re.compile(r"""fragment\s+(\w+)\s+on\s+(\w+)"""),
-    # Type references
     re.compile(r"""__typename\s*[=:]\s*['"`](\w+)['"`]"""),
 ]
 
-# Config/Environment Patterns
-
 CONFIG_PATTERNS = [
-    # Process.env
     re.compile(r"""process\.env\.(\w+)"""),
-    # NEXT_PUBLIC vars
     re.compile(r"""NEXT_PUBLIC_(\w+)"""),
-    # REACT_APP vars
     re.compile(r"""REACT_APP_(\w+)"""),
-    # VUE_APP vars
     re.compile(r"""VUE_APP_(\w+)"""),
-    # Base URL configs
     re.compile(r"""(?:baseURL|baseUrl|apiUrl|apiBase|API_URL|API_BASE)\s*[:=]\s*['"`]([^'"`]+?)['"`]"""),
-    # Environment configs
     re.compile(r"""(?:environment|config|settings)\s*[:=]\s*\{([^}]{10,500})\}""", re.DOTALL),
 ]
-
-# WebSocket Patterns
 
 WEBSOCKET_PATTERNS = [
     re.compile(r"""new\s+WebSocket\s*\(\s*['"`]([^'"`]+?)['"`]"""),
@@ -107,21 +65,13 @@ WEBSOCKET_PATTERNS = [
     re.compile(r"""socket\.(?:connect|io)\s*\(\s*['"`]([^'"`]+?)['"`]"""),
 ]
 
-# Webpack/Chunk Patterns
-
 CHUNK_PATTERNS = [
-    # Webpack chunk loading
     re.compile(r"""(?:__webpack_require__|webpackChunk)\w*\s*\.\s*push"""),
     re.compile(r"""['"`]((?:static/|_next/|chunks?/|assets?/)[^'"`]*?\.(?:js|mjs))['"`]"""),
-    # Dynamic imports
     re.compile(r"""import\s*\(\s*['"`]([^'"`]+?)['"`]\s*\)"""),
-    # Chunk mapping
     re.compile(r"""(?:chunkMapping|chunks?)\s*[:=]\s*\{([^}]+)\}"""),
-    # Source map references
     re.compile(r"""//[#@]\s*sourceMappingURL\s*=\s*(\S+)"""),
 ]
-
-# Internal/Staging URL Patterns
 
 INTERNAL_URL_PATTERNS = [
     re.compile(r"""https?://(?:internal|staging|dev|test|uat|qa|sandbox|preview|canary|admin|debug|local)[.-][^\s'"`<>]{5,100}""", re.IGNORECASE),
@@ -130,16 +80,10 @@ INTERNAL_URL_PATTERNS = [
     re.compile(r"""https?://[^'"`\s]*\.(?:internal|local|corp|intra|private)[.'"`\s/]""", re.IGNORECASE),
 ]
 
-# Hidden Parameter Patterns
-
 PARAM_PATTERNS = [
-    # Object literal parameters
     re.compile(r"""(?:params|data|body|payload|query)\s*[:=]\s*\{([^}]{5,500})\}""", re.DOTALL),
-    # URLSearchParams
     re.compile(r"""URLSearchParams\s*\(\s*\{([^}]+)\}"""),
-    # FormData
     re.compile(r"""formData\.append\s*\(\s*['"`](\w+)['"`]"""),
-    # Query string construction  
     re.compile(r"""[?&](\w+)=(?:\$\{|['"`])"""),
 ]
 
@@ -167,7 +111,6 @@ class DeepJSRecon:
         self.max_chunks = max_chunks
         self.mine_source_maps = mine_source_maps
         
-        # Results
         self.js_files: list[dict] = []
         self.api_endpoints: list[dict] = []
         self.client_routes: list[str] = []
@@ -190,24 +133,18 @@ class DeepJSRecon:
         target = sanitize_target(target)
         started = time.time()
         
-        # Phase 1: Discover all JS files
         js_urls = self._discover_js_files(target)
         
-        # Phase 2: Fetch and analyze each JS file
         for js_url in js_urls[:self.max_js_files]:
             self._analyze_js_file(js_url, target)
         
-        # Phase 3: Mine webpack chunks for additional code
         self._mine_webpack_chunks(target)
         
-        # Phase 4: Check for source maps
         if self.mine_source_maps:
             self._check_source_maps()
         
-        # Phase 5: Deduplicate and classify endpoints
         self._deduplicate_endpoints(target)
         
-        # Phase 6: Generate findings from recon data
         self._generate_findings(target)
         
         elapsed = time.time() - started
@@ -237,14 +174,13 @@ class DeepJSRecon:
             resp = self.session.get(target, timeout=self.timeout, verify=False)
             soup = BeautifulSoup(resp.text, "html.parser")
             
-            # Script tags with src
             for script in soup.find_all("script", src=True):
                 src = script["src"]
                 full_url = urljoin(target, src)
                 if full_url.endswith((".js", ".mjs", ".jsx", ".ts")) or "/chunk" in full_url:
                     js_urls.add(full_url)
             
-            # Inline scripts (for analysis but not fetching)
+            # not fetched, analyzed in-place
             for script in soup.find_all("script", src=False):
                 if script.string and len(script.string) > 100:
                     self.js_files.append({
@@ -254,14 +190,12 @@ class DeepJSRecon:
                         "type": "inline",
                     })
             
-            # Look for preload/prefetch links to JS
             for link in soup.find_all("link", rel=True):
                 rel = " ".join(link.get("rel", []))
                 href = link.get("href", "")
                 if ("preload" in rel or "prefetch" in rel) and href.endswith((".js", ".mjs")):
                     js_urls.add(urljoin(target, href))
             
-            # Find JS references in the HTML source
             html_text = resp.text
             js_in_html = re.findall(r'["\']((?:https?://[^"\']*|/[^"\']*?)\.(?:js|mjs)(?:\?[^"\']*)?)["\']', html_text)
             for js_ref in js_in_html:
@@ -272,7 +206,6 @@ class DeepJSRecon:
         except RequestException:
             pass
         
-        # Common JS paths to check
         common_paths = [
             "/main.js", "/app.js", "/bundle.js", "/vendor.js",
             "/runtime.js", "/polyfill.js", "/chunk.js",
@@ -312,31 +245,22 @@ class DeepJSRecon:
                 "type": "external",
             })
             
-            # Mine API endpoints
             self._extract_api_endpoints(content, js_url, target)
             
-            # Mine client-side routes
             self._extract_routes(content)
             
-            # Mine GraphQL operations
             self._extract_graphql(content, js_url)
             
-            # Mine WebSocket URLs
             self._extract_websockets(content)
             
-            # Mine internal/staging URLs
             self._extract_internal_urls(content)
             
-            # Mine config objects
             self._extract_configs(content, js_url)
             
-            # Mine hidden parameters
             self._extract_params(content, js_url)
             
-            # Check for webpack chunks
             self._extract_chunk_urls(content, js_url, target)
             
-            # Check for source map reference
             source_map_match = re.search(r'//[#@]\s*sourceMappingURL\s*=\s*(\S+)', content)
             if source_map_match:
                 map_url = urljoin(js_url, source_map_match.group(1))
@@ -358,7 +282,6 @@ class DeepJSRecon:
                 endpoint = match.group(1) if match.lastindex else match.group(0)
                 endpoint = endpoint.strip()
                 
-                # Skip obviously non-API strings
                 if len(endpoint) < 3 or len(endpoint) > 200:
                     continue
                 if endpoint.startswith(("#", "data:", "blob:", "javascript:")):
@@ -366,7 +289,6 @@ class DeepJSRecon:
                 if endpoint.endswith((".css", ".png", ".jpg", ".svg", ".gif", ".ico", ".woff", ".ttf")):
                     continue
                 
-                # Resolve relative URLs
                 if endpoint.startswith("/"):
                     full_url = urljoin(target, endpoint)
                 elif endpoint.startswith("http"):
@@ -374,7 +296,6 @@ class DeepJSRecon:
                 else:
                     continue
                 
-                # Determine HTTP method from context
                 context_start = max(0, match.start() - 100)
                 context = content[context_start:match.start() + len(endpoint) + 10]
                 method = "GET"
@@ -387,7 +308,6 @@ class DeepJSRecon:
                 elif re.search(r'\.delete\s*\(|method.*["\']DELETE|DELETE', context, re.IGNORECASE):
                     method = "DELETE"
                 
-                # Determine if authenticated
                 requires_auth = bool(re.search(
                     r'auth|bearer|token|session|cookie|credential', context, re.IGNORECASE
                 ))
@@ -424,7 +344,6 @@ class DeepJSRecon:
                 else:
                     continue
                 
-                # Extract the full operation context
                 start = match.start()
                 end = min(len(content), start + 500)
                 context = content[start:end]
@@ -469,7 +388,7 @@ class DeepJSRecon:
             for match in pattern.finditer(content):
                 param_text = match.group(1) if match.lastindex else match.group(0)
                 
-                # Try to extract individual param names
+
                 param_names = re.findall(r'["\'](\w+)["\']', param_text)
                 if not param_names:
                     param_names = re.findall(r'(\w+)\s*:', param_text)
@@ -492,7 +411,6 @@ class DeepJSRecon:
             for match in pattern.finditer(content):
                 text = match.group(1) if match.lastindex else match.group(0)
                 
-                # Find JS file references in chunk data
                 js_refs = re.findall(r'["\']((?:[^"\']*?)\.(?:js|mjs)(?:\?[^"\']*)?)["\']', text)
                 for ref in js_refs:
                     chunk_url = urljoin(target if not ref.startswith("http") else "", ref)
@@ -517,7 +435,6 @@ class DeepJSRecon:
                         "type": "webpack_chunk",
                     })
                     
-                    # Run all extractors on chunk content
                     self._extract_api_endpoints(resp.text, chunk_url, target)
                     self._extract_routes(resp.text)
                     self._extract_graphql(resp.text, chunk_url)
@@ -567,7 +484,6 @@ class DeepJSRecon:
                             "requires_auth": False,
                         })
                         
-                        # Mine the source map for secrets
                         source_content = json.dumps(map_data.get("sourcesContent", [""]))
                         self._extract_api_endpoints(source_content, sm["map_url"], sm["js_url"])
                         self._extract_internal_urls(source_content)
@@ -592,7 +508,6 @@ class DeepJSRecon:
         
         self.api_endpoints = unique_endpoints
         
-        # Also deduplicate hidden params
         seen_params = set()
         unique_params = []
         for p in self.hidden_params:
@@ -604,7 +519,6 @@ class DeepJSRecon:
     def _generate_findings(self, target: str) -> None:
         """Generate security findings from the recon data."""
         
-        # Finding: Internal/staging URLs discovered
         if self.internal_urls:
             self.findings.append({
                 "id": f"JS-INTERNAL-{hashlib.md5(target.encode()).hexdigest()[:8]}",
@@ -623,7 +537,6 @@ class DeepJSRecon:
                 "impact": "Internal service discovery, SSRF target identification.",
             })
         
-        # Finding: GraphQL introspection possible
         graphql_endpoints = [ep for ep in self.api_endpoints if "graphql" in ep["endpoint"].lower()]
         if graphql_endpoints:
             self.findings.append({
@@ -645,7 +558,6 @@ class DeepJSRecon:
                 "impact": "Full GraphQL attack surface exposed. Test for IDOR, auth bypass, injection.",
             })
         
-        # Finding: WebSocket endpoints
         if self.websocket_urls:
             self.findings.append({
                 "id": f"JS-WS-{hashlib.md5(target.encode()).hexdigest()[:8]}",
@@ -662,7 +574,6 @@ class DeepJSRecon:
                 "impact": "WebSocket attack surface. Test for CSWSH and auth bypass.",
             })
         
-        # Finding: Large number of hidden/undocumented API endpoints
         if len(self.api_endpoints) > 10:
             auth_endpoints = [ep for ep in self.api_endpoints if ep.get("requires_auth")]
             unauth_endpoints = [ep for ep in self.api_endpoints if not ep.get("requires_auth")]

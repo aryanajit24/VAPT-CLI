@@ -14,17 +14,13 @@ from bs4 import BeautifulSoup
 
 from vapt.utils.helpers import sanitize_target
 
-# DOM XSS Sinks — where user data gets executed
-
 DOM_XSS_SINKS = [
-    # Direct execution sinks
     r"\.innerHTML\s*=",
     r"\.outerHTML\s*=",
     r"\.insertAdjacentHTML\s*\(",
     r"document\.write\s*\(",
     r"document\.writeln\s*\(",
     r"\.html\s*\(",  # jQuery .html()
-    # JavaScript URL sinks
     r"\.href\s*=",
     r"\.src\s*=",
     r"\.action\s*=",
@@ -33,18 +29,15 @@ DOM_XSS_SINKS = [
     r"location\.replace\s*\(",
     r"location\.assign\s*\(",
     r"window\.open\s*\(",
-    # Execution sinks
     r"\beval\s*\(",
     r"Function\s*\(",
     r"setTimeout\s*\(\s*['\"]",
     r"setInterval\s*\(\s*['\"]",
     r"execScript\s*\(",
-    # DOM manipulation sinks
     r"\.setAttribute\s*\(\s*['\"]on",
     r"\.setAttribute\s*\(\s*['\"]href",
     r"\.setAttribute\s*\(\s*['\"]src",
     r"\.setAttribute\s*\(\s*['\"]action",
-    # Template sinks
     r"\$\(\s*['\"]<",
     r"jQuery\s*\(\s*['\"]<",
     r"\.append\s*\(",
@@ -53,8 +46,6 @@ DOM_XSS_SINKS = [
     r"\.before\s*\(",
     r"\.replaceWith\s*\(",
 ]
-
-# DOM XSS Sources — where attacker-controlled data enters
 
 DOM_XSS_SOURCES = [
     r"location\.hash",
@@ -77,10 +68,8 @@ DOM_XSS_SOURCES = [
     r"\.data\b",  # event.data in message handler
     r"localStorage\.getItem",
     r"sessionStorage\.getItem",
-    r"\.value\b",  # input.value
+    r"\.value\b",
 ]
-
-# Exposed Secrets Patterns
 
 SECRET_PATTERNS = {
     "AWS Access Key": r"AKIA[0-9A-Z]{16}",
@@ -113,8 +102,6 @@ SECRET_PATTERNS = {
     "Telegram Bot Token": r"\d{8,10}:[A-Za-z0-9_-]{35}",
 }
 
-# Prototype Pollution Patterns
-
 PROTO_POLLUTION_SINKS = [
     r"Object\.assign\s*\(",
     r"\$\.extend\s*\(",
@@ -134,20 +121,14 @@ PROTO_POLLUTION_SINKS = [
     r"prototype\s*\[",
 ]
 
-# SPA Route Patterns
-
 SPA_ROUTE_PATTERNS = [
-    # React Router
     r"<Route\s+path=['\"]([^'\"]+)",
     r"path:\s*['\"]([^'\"]+)",
     r"navigate\(['\"]([^'\"]+)",
-    # Angular
     r"routerLink=['\"]([^'\"]+)",
     r"loadChildren:\s*['\"]([^'\"]+)",
-    # Vue Router
     r"path:\s*['\"]([^'\"]+)",
     r"\$router\.push\(['\"]([^'\"]+)",
-    # Generic
     r"window\.location\.hash\s*=\s*['\"]#([^'\"]+)",
     r"history\.push(?:State)?\s*\([^,]*,\s*[^,]*,\s*['\"]([^'\"]+)",
 ]
@@ -200,7 +181,6 @@ class DOMScanner:
 
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            # Extract and analyze all JavaScript
             js_contents = self._extract_javascript(url, soup)
             full_js = "\n".join(js_contents)
 
@@ -217,10 +197,8 @@ class DOMScanner:
                 self._check_client_redirect(url, full_js)
                 self._discover_spa_routes(url, full_js)
 
-            # Also check HTML for secrets
             self._check_exposed_secrets(url, "", resp.text)
 
-            # Enqueue links
             for link in soup.find_all("a", href=True):
                 abs_url = urljoin(url, link["href"])
                 if urlparse(abs_url).netloc == base_domain and abs_url not in self._visited:
@@ -230,17 +208,14 @@ class DOMScanner:
         """Extract inline and external JS from a page."""
         js_list = []
 
-        # Inline scripts
         for script in soup.find_all("script"):
             if script.string:
                 js_list.append(script.string)
 
-        # External scripts (same origin)
         base_domain = urlparse(page_url).netloc
         for script in soup.find_all("script", src=True):
             src_url = urljoin(page_url, script["src"])
             parsed = urlparse(src_url)
-            # Include same-origin and relative scripts
             if parsed.netloc == base_domain or not parsed.netloc:
                 if src_url not in self._js_cache:
                     try:
@@ -274,7 +249,6 @@ class DOMScanner:
                 context = js[start:end].strip()
                 found_sinks.append((pattern, m.group(), context))
 
-        # Report source→sink pairs that appear near each other
         if found_sources and found_sinks:
             for source_pat, source_match, source_ctx in found_sources:
                 for sink_pat, sink_match, sink_ctx in found_sinks:
@@ -334,10 +308,8 @@ class DOMScanner:
         for secret_name, pattern in SECRET_PATTERNS.items():
             matches = re.findall(pattern, content)
             if matches:
-                # Deduplicate
                 unique_matches = list(set(matches))
                 for match in unique_matches[:3]:
-                    # Mask the secret for safe reporting
                     masked = match[:8] + "..." + match[-4:] if len(match) > 12 else match[:4] + "..."
                     self._add_finding(
                         vuln_id="DOM-003",
@@ -356,7 +328,7 @@ class DOMScanner:
 
     def _check_postmessage(self, url: str, js: str) -> None:
         """Detect insecure postMessage handlers (no origin check)."""
-        # Find message event listeners
+
         message_handlers = re.finditer(
             r"(?:addEventListener|on)\s*\(\s*['\"]message['\"]"
             r"|\.on\s*\(\s*['\"]message['\"]"
@@ -366,10 +338,8 @@ class DOMScanner:
 
         for m in message_handlers:
             start = m.start()
-            # Get the handler code block (next ~500 chars)
             block = js[start:start + 500]
 
-            # Check for origin verification
             has_origin_check = bool(re.search(
                 r"(?:event|e|evt|msg)\.origin\s*(?:===|!==|==|!=)"
                 r"|\.origin\s*\.(?:includes|indexOf|match|startsWith)",
@@ -377,7 +347,6 @@ class DOMScanner:
             ))
 
             if not has_origin_check:
-                # Check what the handler does with the data
                 uses_data_dangerously = bool(re.search(
                     r"innerHTML|eval|Function|document\.write|\.html\(|location|\.src\s*=|\.href\s*=",
                     block,
@@ -418,7 +387,6 @@ class DOMScanner:
             if re.search(r"(?:token|key|auth|session|jwt)=", ws_url, re.IGNORECASE):
                 issues.append("Authentication token exposed in WebSocket URL")
 
-            # Check for CSWSH vulnerability (no origin check on connect)
             block = js[m.start():m.start() + 1000]
             if not re.search(r"origin|csrf|token|nonce", block, re.IGNORECASE):
                 issues.append("Possible Cross-Site WebSocket Hijacking (no auth in handshake)")
@@ -555,7 +523,6 @@ class DOMScanner:
         if not angular_detected:
             return
 
-        # Check for user input in ng-bind-html or interpolation
         unsafe_patterns = [
             r"ng-bind-html\s*=\s*['\"](?!.*\|\s*sanitize)",
             r"\$sce\.trustAsHtml",
@@ -579,7 +546,6 @@ class DOMScanner:
                 )
                 return
 
-        # Test interpolation with actual request
         try:
             test_url = url + ("&" if "?" in url else "?") + "q={{7*7}}"
             resp = self.session.get(test_url, timeout=self.timeout)
@@ -603,18 +569,16 @@ class DOMScanner:
 
     def _check_jsonp(self, url: str, soup: BeautifulSoup, html: str) -> None:
         """Detect JSONP endpoints vulnerable to callback injection."""
-        # Find JSONP patterns in scripts
+
         jsonp_patterns = re.findall(
             r"(?:callback|jsonp|cb|jsonpcallback|func)\s*=\s*['\"]?([a-zA-Z_]\w*)",
             html,
             re.IGNORECASE,
         )
 
-        # Find script tags with callback params
         for script in soup.find_all("script", src=True):
             src = script["src"]
             if re.search(r"callback=|jsonp=|cb=", src, re.IGNORECASE):
-                # Try to inject a custom callback
                 try:
                     test_url = re.sub(
                         r"(callback|jsonp|cb)=[^&]+",
@@ -647,15 +611,13 @@ class DOMScanner:
             matches = re.findall(pattern, js)
             routes.update(matches)
 
-        # Enqueue discovered routes for scanning
         if routes:
             base = urlparse(url)
             for route in routes:
                 if route.startswith("/"):
                     full_url = f"{base.scheme}://{base.netloc}{route}"
                     if full_url not in self._visited:
-                        self._visited.add(full_url)  # Mark as visited
-                        # Scan the route
+                        self._visited.add(full_url)
                         try:
                             resp = self.session.get(full_url, timeout=self.timeout)
                             if resp.status_code == 200:
@@ -671,7 +633,6 @@ class DOMScanner:
 
     def _add_finding(self, **kwargs: Any) -> None:
         """Add a deduplicated finding."""
-        # Dedup by (vuln_id, url, title)
         key = (kwargs.get("vuln_id"), kwargs.get("url"), kwargs.get("title", "")[:80])
         dedup_hash = hashlib.md5(str(key).encode()).hexdigest()
 

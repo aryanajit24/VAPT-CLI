@@ -8,7 +8,7 @@ PYTHON_MIN="3.10"
 
 print_banner() {
     echo "============================================"
-    echo "  VAPT CLI — Installer v8.0"
+    echo "  VAPT CLI — Installer v9.0"
     echo "============================================"
     echo ""
 }

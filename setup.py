@@ -14,7 +14,8 @@ setup(
     name="vapt-cli",
     version="9.0.0",
     # Keep in sync with vapt/__init__.py
-    author="VAPT CLI Contributors",
+    author="aryanajit24",
+    author_email="",  
     description="Vulnerability Assessment & Penetration Testing CLI",
     long_description=README,
     long_description_content_type="text/markdown",

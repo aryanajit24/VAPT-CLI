@@ -666,15 +666,5 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
-## Contributing
-
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Write tests for your changes
-4. Run `python3 -m pytest tests/ -v` to make sure everything passes
-5. Submit a pull request
-
----
-
 Built by [@aryanajit24](https://github.com/aryanajit24)
 

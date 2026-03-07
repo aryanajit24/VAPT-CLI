@@ -13,8 +13,6 @@ from requests.exceptions import RequestException
 from vapt.utils.helpers import sanitize_target
 
 
-# This covers the most commonly found hidden endpoints in bug bounty programs.
-
 DIR_WORDLIST = [
     # Admin panels
     "admin", "administrator", "admin-panel", "admin_panel", "admincp",
@@ -69,7 +67,6 @@ DIR_WORDLIST = [
     "monitor", "monitoring", "metrics", "datadog",
 ]
 
-# File extensions to append to each wordlist entry
 FILE_EXTENSIONS = [
     ".php", ".php.bak", ".php~", ".php.old",
     ".asp", ".aspx",
@@ -85,7 +82,6 @@ FILE_EXTENSIONS = [
     ".env", ".key", ".pem", ".crt",
 ]
 
-# Specific high-value files to always check (in addition to wordlist)
 HIGH_VALUE_FILES = [
     "/.git/HEAD", "/.git/config", "/.git/COMMIT_EDITMSG",
     "/.svn/entries", "/.svn/wc.db",
@@ -104,7 +100,6 @@ HIGH_VALUE_FILES = [
     "/dump.sql", "/database.sql",
 ]
 
-# Parameter edge cases for logic bug fuzzing
 PARAM_FUZZ_VALUES = [
     # Type confusion
     "0", "-1", "99999999", "null", "undefined", "true", "false",
@@ -126,12 +121,9 @@ PARAM_FUZZ_VALUES = [
     "\u0000", "\uFEFF",
 ]
 
-# STATUS codes that confirm content is actually accessible
-# 403 is NOT included — a 403 means the server is CORRECTLY blocking access.
-# 401 alone is NOT a vulnerability — authentication is working as intended.
-# Only report findings where the content is actually exposed.
+# 403 excluded — server correctly blocking access
+# 401 excluded — auth working as intended
 ACCESSIBLE_STATUS = {200, 201, 206}
-# Redirect statuses — may indicate resource exists and redirects
 REDIRECT_STATUS = {301, 302, 307}
 
 
@@ -148,7 +140,6 @@ class Fuzzer:
     ) -> None:
         self.timeout = timeout
         self.safety_config = safety_config or {}
-        # Apply safety limits to workers and path count
         max_threads = self.safety_config.get("max_concurrent_threads")
         self.max_workers = min(max_workers, max_threads) if max_threads else max_workers
         self.extensions = extensions
@@ -173,15 +164,12 @@ class Fuzzer:
             "findings": [],
         }
 
-        # Build full path list
         paths = self._build_path_list()
         results["paths_tested"] = len(paths)
 
-        # Concurrent directory brute-force
         findings = self._bruteforce(base_url, paths)
         results["findings"] += findings
 
-        # IDOR numeric ID enumeration on common endpoints
         results["findings"] += self._idor_enum(base_url)
 
         return results
@@ -197,10 +185,10 @@ class Fuzzer:
                 for ext in FILE_EXTENSIONS:
                     paths.append(f"/{word}{ext}")
 
-        # Safety: cap the number of paths to avoid hammering the target
+        # cap paths to avoid hammering target
         max_paths = self.safety_config.get("max_fuzz_paths")
         if max_paths and len(paths) > max_paths:
-            # Keep high-value files first since they are most informative
+            # high-value files are first in the list
             paths = paths[:max_paths]
 
         return paths
@@ -233,7 +221,6 @@ class Fuzzer:
         try:
             resp = self.session.get(url, timeout=self.timeout, allow_redirects=False)
 
-            # Only accessible content (200/201/206) is reportable
             if resp.status_code not in ACCESSIBLE_STATUS:
                 return None
 
@@ -241,16 +228,12 @@ class Fuzzer:
             body = resp.text if resp.text else ""
             body_len = len(resp.content)
 
-            # Even with a 200, we need to validate that we're seeing real
-            # sensitive content, not a generic "404 page" served as 200,
-            # a CDN error page, or a custom error page.
+            # filter soft-404s, CDN pages, error pages served as 200
             if not self._is_real_content(path, body, body_len, resp):
                 return None
 
-            # Classify the finding based on what was ACTUALLY found
             category, vuln_id, severity, cvss = self._classify_path(path, resp)
 
-            # Capture request/response evidence
             request_raw = getattr(self.session, 'last_request', None) or f"GET {url} HTTP/1.1"
             response_raw = getattr(self.session, 'last_response', None) or f"HTTP/1.1 {resp.status_code}"
             body_preview = body[:500]
@@ -289,11 +272,9 @@ class Fuzzer:
         body_lower = body.lower()
         pl = path.lower()
 
-        # Too small to contain anything useful (likely empty/stub)
         if body_len < 10:
             return False
 
-        # Soft 404 / generic error page detection
         SOFT_404_PATTERNS = [
             "page not found", "404 not found", "not found",
             "the page you requested", "does not exist",
@@ -301,12 +282,10 @@ class Fuzzer:
             "resource not found", "nothing here",
         ]
         if any(pat in body_lower for pat in SOFT_404_PATTERNS):
-            # Make sure it's not a REAL file that just happens to contain
-            # these words (e.g., an error handling config file)
+            # real config files may contain "not found" strings
             if body_len < 2000:  # Short pages with "not found" = soft 404
                 return False
 
-        # CDN / WAF block page patterns
         CDN_BLOCK_PATTERNS = [
             "access denied", "error from cloudfront",
             "attention required", "checking your browser",
@@ -318,7 +297,6 @@ class Fuzzer:
         if any(pat in body_lower for pat in CDN_BLOCK_PATTERNS):
             return False
 
-        # Default framework pages
         FRAMEWORK_DEFAULT = [
             "welcome to nginx", "apache2 debian default page",
             "it works!", "iis windows server",
@@ -327,21 +305,15 @@ class Fuzzer:
         if any(pat in body_lower for pat in FRAMEWORK_DEFAULT):
             return False
 
-        # For known high-value files, verify actual sensitive content
-
-        # .git/HEAD must contain a ref line
         if ".git/head" in pl:
             return "ref:" in body_lower or body.strip().startswith("ref:")
 
-        # .git/config must look like a git config
         if ".git/config" in pl:
             return "[core]" in body_lower or "[remote" in body_lower
 
-        # .env files must look like env vars (KEY=VALUE)
         if pl.endswith(".env") or ".env." in pl:
             return bool(re.search(r'^[A-Z_]+=.+', body, re.MULTILINE))
 
-        # Config files (PHP, Python, YAML) — must have config-like patterns
         if any(ext in pl for ext in [".php", ".py", ".yml", ".yaml", ".json", ".xml"]):
             config_indicators = [
                 "password", "secret", "key", "token", "database",
@@ -351,47 +323,38 @@ class Fuzzer:
             ]
             return any(ind in body_lower for ind in config_indicators)
 
-        # SQL dump files
         if any(ext in pl for ext in [".sql", "dump"]):
             return any(kw in body_lower for kw in
                        ["create table", "insert into", "drop table", "alter table"])
 
-        # Backup archives can't be validated by text content (binary), but
-        # if we got a 200-byte response for a .zip, it's not a real zip
+        # binary archives: reject tiny responses as fake
         if any(ext in pl for ext in [".zip", ".tar.gz", ".tgz", ".7z", ".gz"]):
             return body_len > 100 and not body_lower.startswith("<!")
 
-        # Htpasswd must look like htpasswd
         if ".htpasswd" in pl:
             return bool(re.search(r'^\w+:\$', body, re.MULTILINE)) or ":" in body
 
-        # .htaccess must contain Apache directives
         if ".htaccess" in pl:
             return any(d in body_lower for d in
                        ["rewriterule", "deny from", "allow from", "authtype", "require"])
 
-        # server-status / server-info must have Apache status output
         if "server-status" in pl or "server-info" in pl:
             return any(kw in body_lower for kw in
                        ["apache server status", "server version", "scoreboard",
                         "current time", "server uptime", "total accesses"])
 
-        # Swagger / OpenAPI
         if any(term in pl for term in ["swagger", "openapi", "api-docs"]):
             return any(kw in body_lower for kw in
                        ['"swagger"', '"openapi"', '"paths"', '"info"'])
 
-        # actuator endpoints
         if "actuator" in pl:
             return any(kw in body_lower for kw in
                        ['"status"', '"beans"', '"mappings"', '"env"', '"health"'])
 
-        # phpinfo
         if "phpinfo" in pl or "info.php" in pl:
             return "php version" in body_lower or "phpinfo()" in body_lower
 
-        # Admin panels — a 200 on /admin is only a finding if it shows
-        # an actual login form or admin content, not a redirect or error
+        # only flag if showing actual login form or admin content
         if any(p in pl for p in ["admin", "panel", "dashboard", "management", "backend"]):
             admin_indicators = [
                 "<form", "login", "password", "username",
@@ -400,9 +363,7 @@ class Fuzzer:
             ]
             return any(ind in body_lower for ind in admin_indicators)
 
-        # Anything else with a 200 and decent body length is plausibly real
-        # but be conservative — reject very short or HTML-only responses
-        # that look like custom error pages
+        # reject very short or error-like responses
         if body_len < 100:
             return False
 
@@ -427,32 +388,26 @@ class Fuzzer:
         pl = path.lower()
         body = resp.text.lower() if resp.text else ""
 
-        # Git / VCS exposure — critical (content already validated)
         if any(p in pl for p in [".git", ".svn", ".hg"]):
             return "exposed_file", "FUZZ-002", "critical", 9.1
 
-        # Secrets / credentials — critical
         if any(p in pl for p in [".env", "secret", "credential", "creds", "private_key",
                                    ".key", ".pem", ".pfx", "password", "passwd"]):
             return "exposed_secret", "FUZZ-002", "critical", 9.1
 
-        # Backup / dump files — high
         if any(p in pl for p in ["backup", ".bak", ".sql", "dump", ".zip",
                                    ".tar.gz", ".tgz", ".old", ".orig"]):
             return "exposed_file", "FUZZ-002", "high", 7.5
 
-        # Admin panels with actual login forms — high
         if any(p in pl for p in ["admin", "administrator", "phpmyadmin", "adminer",
                                    "panel", "dashboard", "control", "management", "backend"]):
             return "exposed_admin_panel", "FUZZ-003", "high", 7.5
 
-        # Dev / debug endpoints — high
         if any(p in pl for p in ["debug", "console", "shell", "actuator", "h2-console",
                                    "phpinfo", "server-status", "server-info", "swagger",
                                    "graphiql", "_profiler"]):
             return "exposed_debug_endpoint", "FUZZ-001", "high", 7.5
 
-        # Generic accessible resource
         return "exposed_file", "FUZZ-001", "medium", 5.3
 
     @staticmethod
@@ -503,11 +458,10 @@ class Fuzzer:
                 except RequestException:
                     pass
 
-            # If 2+ IDs return 200 with different body sizes, likely IDOR
             ok_responses = [(i, s, b) for i, s, b in responses if s == 200]
             if len(ok_responses) >= 2:
                 body_sizes = {b for _, _, b in ok_responses}
-                if len(body_sizes) > 1:  # different users/objects returned
+                if len(body_sizes) > 1:
                     example_url = base_url.rstrip("/") + path_template.format(id=1)
                     findings.append({
                         "vuln_id": "FUZZ-004",

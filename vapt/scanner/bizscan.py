@@ -19,24 +19,19 @@ from requests.exceptions import RequestException
 from vapt.utils.helpers import sanitize_target
 
 
-# Business Logic Endpoint Discovery Patterns
-
 FINANCIAL_ENDPOINTS = [
-    # Payment / Transfer
     "/api/transfer", "/api/v1/transfer", "/api/v2/transfer",
     "/api/payment", "/api/v1/payment", "/api/pay",
     "/api/send-money", "/api/v1/send", "/api/v1/send-money",
     "/api/withdraw", "/api/v1/withdraw", "/api/v1/withdrawal",
     "/api/deposit", "/api/v1/deposit",
     "/api/transaction", "/api/v1/transaction", "/api/v1/transactions",
-    # Investment / Portfolio
     "/api/invest", "/api/v1/invest", "/api/v1/portfolio/invest",
     "/api/portfolio", "/api/v1/portfolio", "/api/v1/portfolios",
     "/api/trade", "/api/v1/trade", "/api/v1/trades",
     "/api/order", "/api/v1/order", "/api/v1/orders",
     "/api/redeem", "/api/v1/redeem",
     "/api/dividend", "/api/v1/dividend", "/api/v1/dividends",
-    # Billing / Subscription
     "/api/billing", "/api/v1/billing", "/api/subscribe",
     "/api/v1/subscribe", "/api/subscription", "/api/v1/subscription",
     "/api/checkout", "/api/v1/checkout",
@@ -137,13 +132,9 @@ class BusinessLogicScanner:
         
         started = time.time()
         
-        # Phase 1: Discover business endpoints
         discovered = self._discover_endpoints(target, endpoints)
-        
-        # Phase 2: Classify endpoints by business function
         classified = self._classify_endpoints(discovered)
         
-        # Phase 3: Run business logic tests
         self._test_race_conditions(target, classified.get("financial", []))
         self._test_negative_amounts(target, classified.get("financial", []))
         self._test_amount_manipulation(target, classified.get("financial", []))
@@ -154,7 +145,6 @@ class BusinessLogicScanner:
         self._test_mfa_bypass(target, classified.get("verification", []))
         self._test_feature_flag_bypass(target)
         
-        # Phase 4: If we have two sessions, test IDOR/priv-esc
         if second_auth_session:
             self._test_idor_cross_account(
                 target, classified, auth_session or self.session, second_auth_session
@@ -269,8 +259,7 @@ class BusinessLogicScanner:
         if not financial_endpoints:
             return
         
-        for endpoint in financial_endpoints[:5]:  # Top 5 most interesting
-            # Test with various HTTP methods
+        for endpoint in financial_endpoints[:5]:
             for method in ["POST", "PUT", "PATCH"]:
                 test_body = {
                     "amount": 1,
@@ -308,7 +297,6 @@ class BusinessLogicScanner:
                         if result:
                             results.append(result)
                 
-                # Analyze results for race condition indicators
                 if results:
                     success_count = sum(1 for r in results if r["status"] in (200, 201, 202))
                     if success_count > 1:
@@ -433,22 +421,18 @@ class BusinessLogicScanner:
             return
         
         manipulation_payloads = [
-            # Overflow / underflow
             {"amount": 0},
             {"amount": 0.001},
             {"amount": 0.00001},
             {"amount": 99999999999},
             {"amount": 2147483647},       # INT_MAX
-            {"amount": 9999999999999999},  # Overflow
-            # Type confusion
+            {"amount": 9999999999999999},
             {"amount": "NaN"},
             {"amount": "Infinity"},
             {"amount": "1e10"},            # Scientific notation
             {"amount": "0x64"},            # Hex
-            # String manipulation
             {"amount": "100.000000000000001"},
             {"amount": "0.000000000000001"},
-            # Currency mismatch
             {"amount": 1, "currency": "XXX"},
             {"amount": 1, "currency": ""},
             {"amount": 1, "currency": None},
@@ -507,7 +491,6 @@ class BusinessLogicScanner:
         if not verification_endpoints:
             return
         
-        # Try accessing endpoints that should require verification
         post_verify_paths = [
             "/api/dashboard", "/api/v1/dashboard",
             "/api/portfolio", "/api/v1/portfolio",
@@ -529,7 +512,6 @@ class BusinessLogicScanner:
                         "verify", "verification required", "complete kyc",
                         "not verified", "pending verification",
                     ]):
-                        # This might be accessible without verification
                         self._discovered_endpoints.append({
                             "url": url,
                             "status": resp.status_code,
@@ -555,7 +537,6 @@ class BusinessLogicScanner:
         ]
         
         for endpoint in promo_endpoints[:3]:
-            # Test 1: Code reuse (same code twice)
             for code in test_codes[:3]:
                 responses = []
                 for attempt in range(3):
@@ -640,7 +621,6 @@ class BusinessLogicScanner:
                             param_key = list(params.keys())[0]
                             param_val = str(list(params.values())[0]).lower()
                             if param_val in body or param_key.lower() in body:
-                                # Potentially accepted — verify by re-fetching
                                 try:
                                     verify_resp = self.session.get(endpoint, timeout=self.timeout, verify=False)
                                     if param_val in verify_resp.text.lower():
@@ -700,7 +680,6 @@ class BusinessLogicScanner:
         ]
         
         for endpoint in financial_endpoints[:3]:
-            # First: try WITHOUT idempotency key
             test_body = {
                 "amount": 0.01,
                 "reference": f"idemp-test-{uuid.uuid4().hex[:8]}",
@@ -725,7 +704,6 @@ class BusinessLogicScanner:
             
             successes = [r for r in responses if r["status"] in (200, 201, 202)]
             if len(successes) > 1:
-                # Same request succeeded multiple times — potential idempotency issue
                 self.findings.append({
                     "id": f"BIZ-014-{hashlib.md5(endpoint.encode()).hexdigest()[:8]}",
                     "title": f"Idempotency Bypass: Replay attack on {urlparse(endpoint).path}",
@@ -762,19 +740,16 @@ class BusinessLogicScanner:
         )]
         
         bypass_payloads = [
-            # Empty/null values
             {"otp": "", "code": ""},
             {"otp": None, "code": None},
             {"otp": "000000"},
             {"otp": "111111"},
             {"otp": "123456"},
             {"otp": "999999"},
-            # Type confusion
             {"otp": 0},
             {"otp": True},
             {"otp": []},
             {"otp": {}},
-            # Skip verification
             {"verified": True, "otp_verified": True},
             {"skip_2fa": True},
             {"bypass": True},
@@ -860,7 +835,6 @@ class BusinessLogicScanner:
         for path in feature_paths:
             url = urljoin(target, path)
             
-            # Test with feature headers
             for headers in feature_headers:
                 try:
                     resp = self.session.get(
@@ -915,7 +889,6 @@ class BusinessLogicScanner:
         3. Attempt to access user A's resources using session B
         4. If successful, it's an IDOR
         """
-        # Collect all endpoints to test
         all_eps = []
         for category, eps in classified.items():
             if category != "other":
@@ -923,16 +896,13 @@ class BusinessLogicScanner:
         
         for endpoint in all_eps[:10]:
             try:
-                # Step 1: Get resource as user A
                 resp_a = session_a.get(endpoint, timeout=self.timeout, verify=False)
                 if resp_a.status_code != 200:
                     continue
                 
-                # Step 2: Try to extract IDs from the response
                 body_a = resp_a.text
                 ids_found = set()
                 
-                # Look for common ID patterns
                 for pattern in [
                     r'"id"\s*:\s*"?(\d+)"?',
                     r'"user_id"\s*:\s*"?(\d+)"?',
@@ -945,9 +915,7 @@ class BusinessLogicScanner:
                 if not ids_found:
                     continue
                 
-                # Step 3: Try accessing as user B
                 for resource_id in list(ids_found)[:3]:
-                    # Try appending ID to endpoint
                     id_url = f"{endpoint.rstrip('/')}/{resource_id}"
                     try:
                         resp_b = session_b.get(id_url, timeout=self.timeout, verify=False)

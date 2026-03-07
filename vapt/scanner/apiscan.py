@@ -14,11 +14,7 @@ from requests.exceptions import RequestException
 
 from vapt.utils.helpers import sanitize_target
 
-# Extended list of common API paths — covers REST conventions, framework
-# defaults, admin panels, and common SaaS API patterns.
-
 COMMON_API_PATHS = [
-    # User / auth
     "/api/v1/users", "/api/v2/users", "/api/v3/users", "/api/users",
     "/api/v1/user", "/api/v2/user",
     "/api/v1/me", "/api/v2/me", "/api/me",
@@ -33,7 +29,6 @@ COMMON_API_PATHS = [
     "/api/v1/refresh", "/api/refresh",
     "/api/v1/password", "/api/password",
     "/api/v1/reset-password", "/api/reset-password",
-    # Admin
     "/api/admin", "/api/v1/admin", "/api/v2/admin",
     "/api/admin/users", "/api/v1/admin/users",
     "/api/admin/config", "/api/v1/admin/config",
@@ -42,7 +37,6 @@ COMMON_API_PATHS = [
     "/api/internal", "/api/v1/internal",
     "/api/management", "/api/v1/management",
     "/api/superuser", "/api/root",
-    # Config / debug
     "/api/config", "/api/v1/config", "/api/v2/config",
     "/api/settings", "/api/v1/settings",
     "/api/health", "/api/v1/health", "/api/status",
@@ -50,7 +44,6 @@ COMMON_API_PATHS = [
     "/api/debug", "/api/v1/debug",
     "/api/env", "/api/v1/env",
     "/api/info", "/api/v1/info",
-    # Docs / specs
     "/api/docs", "/api/v1/docs", "/docs",
     "/swagger.json", "/swagger.yaml",
     "/openapi.json", "/openapi.yaml",
@@ -58,11 +51,9 @@ COMMON_API_PATHS = [
     "/swagger-ui.html", "/swagger-ui/",
     "/api/swagger", "/api/openapi",
     "/redoc", "/api/redoc",
-    # GraphQL
     "/graphql", "/api/graphql", "/v1/graphql",
     "/graphiql", "/api/graphiql",
     "/gql", "/api/gql",
-    # Data / resources
     "/api/v1/orders", "/api/v2/orders", "/api/orders",
     "/api/v1/products", "/api/v2/products", "/api/products",
     "/api/v1/items", "/api/v2/items", "/api/items",
@@ -82,10 +73,8 @@ COMMON_API_PATHS = [
     "/actuator/logfile", "/actuator/metrics",
 ]
 
-# IDs to test for BOLA/IDOR — try accessing other users' objects
 BOLA_TEST_IDS = ["1", "2", "100", "admin", "0", "-1", "me", "self"]
 
-# Sensitive field names that should never appear in API responses
 SENSITIVE_FIELDS = {
     "password", "passwd", "password_hash", "hashed_password",
     "secret", "token", "api_key", "apikey", "access_token",
@@ -94,7 +83,6 @@ SENSITIVE_FIELDS = {
     "aws_secret", "aws_access_key", "database_url", "connection_string",
 }
 
-# Fields to attempt mass assignment on
 MASS_ASSIGN_FIELDS = {
     "isAdmin": True, "is_admin": True, "admin": True,
     "role": "admin", "roles": ["admin"], "permissions": ["all"],
@@ -103,12 +91,10 @@ MASS_ASSIGN_FIELDS = {
     "balance": 999999, "credit": 999999,
 }
 
-# GraphQL introspection query
 GRAPHQL_INTROSPECTION = json.dumps({
     "query": "{ __schema { queryType { name } types { name kind description } } }"
 })
 
-# JWT weak secrets to try brute-forcing
 WEAK_JWT_SECRETS = [
     "secret", "password", "123456", "admin", "test",
     "changeme", "key", "token", "jwt", "supersecret",
@@ -127,7 +113,6 @@ class APIScanner:
         else:
             self._raw_session = requests.Session()
             self._raw_session.verify = False  # noqa: S501
-        # Wrap session with EvidenceCollector for request/response capture
         from vapt.engine.evidence import EvidenceCollector
         self.session = EvidenceCollector(self._raw_session, timeout)
 
@@ -146,23 +131,19 @@ class APIScanner:
             "findings": [],
         }
 
-        # Phase 1 — discover endpoints
         discovered = self._discover_endpoints(base_url)
         results["endpoints_discovered"] = discovered
 
-        # Phase 2 — check spec files for more endpoints
         spec_endpoints = self._parse_api_spec(base_url)
         all_endpoints = list(set(discovered + spec_endpoints))
         results["endpoints_discovered"] = all_endpoints
 
-        # Phase 3 — per-endpoint attacks
         for endpoint in all_endpoints:
             results["findings"] += self._test_data_exposure(base_url, endpoint)
             results["findings"] += self._test_bola(base_url, endpoint)
             results["findings"] += self._test_verb_tampering(base_url, endpoint)
             results["findings"] += self._test_verbose_errors(base_url, endpoint)
 
-        # Phase 4 — global API checks
         results["findings"] += self._test_unauthed_admin(base_url)
         results["findings"] += self._test_cors(base_url)
 
@@ -177,7 +158,6 @@ class APIScanner:
         if not self.safety_config.get("skip_file_write"):
             results["findings"] += self._test_mass_assignment(base_url, all_endpoints)
 
-        # Deduplicate
         seen: set[tuple] = set()
         unique: list[dict] = []
         for f in results["findings"]:
@@ -246,14 +226,11 @@ class APIScanner:
 
     def _test_bola(self, base_url: str, path: str) -> list[dict]:
         """Test for Broken Object Level Authorization by trying alternate IDs."""
-        # Only test paths that look like they return individual objects
-        # e.g., /api/v1/users, /api/orders — we append /{id}
         if not any(word in path for word in ["user", "order", "item", "product", "account", "file", "message"]):
             return []
         findings = []
         for test_id in BOLA_TEST_IDS:
             url = base_url.rstrip("/") + path.rstrip("/") + f"/{test_id}"
-            # Try without auth (fresh session)
             try:
                 no_auth = requests.Session()
                 no_auth.verify = False
@@ -263,7 +240,6 @@ class APIScanner:
                         data = resp.json()
                     except ValueError:
                         data = {}
-                    # Flag if it looks like it returned real user data
                     suspicious_fields = {"email", "username", "name", "phone", "address", "ssn"}
                     if isinstance(data, dict) and any(k.lower() in suspicious_fields for k in data):
                         findings.append(self._f(
@@ -306,7 +282,6 @@ class APIScanner:
             re.IGNORECASE,
         )
         try:
-            # Send garbage JSON to trigger internal errors
             resp = self.session.post(
                 url,
                 data="{{invalid_json::::",
@@ -411,7 +386,6 @@ class APIScanner:
         gql_paths = ["/graphql", "/api/graphql", "/v1/graphql", "/graphiql", "/gql"]
         for path in gql_paths:
             url = base_url.rstrip("/") + path
-            # Test introspection
             try:
                 resp = self.session.post(
                     url,
@@ -435,7 +409,6 @@ class APIScanner:
             except RequestException:
                 pass
 
-            # Test for GraphQL injection (simple probe)
             try:
                 injection_query = json.dumps({"query": "{ user(id: \"1 OR 1=1\") { id email } }"})
                 resp = self.session.post(
@@ -463,13 +436,11 @@ class APIScanner:
 
         findings: list[dict] = []
 
-        # Parse the JWT
         try:
             parts = token.split(".")
             if len(parts) != 3:
                 return []
             header_b64, payload_b64, sig_b64 = parts
-            # Decode header (pad if needed)
             header = json.loads(base64.b64decode(header_b64 + "=="))
             payload_data = json.loads(base64.b64decode(payload_b64 + "=="))
         except Exception:
@@ -477,7 +448,6 @@ class APIScanner:
 
         alg = header.get("alg", "")
 
-        # Check 1 — none algorithm
         if alg.lower() == "none":
             findings.append(self._f(
                 "API-006", "api",
@@ -486,7 +456,6 @@ class APIScanner:
                 "critical", 9.8,
             ))
 
-        # Check 2 — weak HMAC secret brute-force (HS256/HS384/HS512 only)
         if alg.startswith("HS"):
             signing_input = f"{header_b64}.{payload_b64}".encode()
             hash_func = {
@@ -507,7 +476,6 @@ class APIScanner:
                     ))
                     break
 
-        # Check 3 — sensitive data in JWT payload
         sensitive_jwt_fields = {"password", "secret", "private_key", "api_key"}
         for field in sensitive_jwt_fields:
             if field in payload_data:

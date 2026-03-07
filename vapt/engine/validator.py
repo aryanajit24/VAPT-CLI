@@ -10,16 +10,13 @@ from dataclasses import dataclass
 
 import requests
 
-# Confidence levels & thresholds
-
 CONFIDENCE_HIGH = 0.90
 CONFIDENCE_MEDIUM = 0.70
 CONFIDENCE_LOW = 0.40
 
 TIMING_THRESHOLD = 3.0   # Seconds above baseline to count as delay
-TIMING_RETRIES = 3       # Number of timing re-confirmations
+TIMING_RETRIES = 3
 
-# Categories that are always auto-confirmed with high confidence
 AUTO_CONFIRM_HIGH: set[str] = {
     "header", "security_header", "info", "info_disclosure",
     "directory_listing", "sensitive_file", "subdomain_takeover",
@@ -27,7 +24,6 @@ AUTO_CONFIRM_HIGH: set[str] = {
     "missing_header", "server_info", "technology_disclosure",
 }
 
-# Categories that are confirmed just by evidence existing (pattern-based)
 # NOTE: These should only be categories where the EVIDENCE ITSELF is proof.
 # Do NOT include categories that need re-verification (like fuzzer findings).
 PATTERN_CONFIRM: set[str] = {
@@ -41,7 +37,6 @@ PATTERN_CONFIRM: set[str] = {
     "cloud_admin_panel", "cve",
 }
 
-# Map raw category strings to canonical names
 CATEGORY_ALIASES: dict[str, str] = {
     "sqli": "sqli", "sql_injection": "sqli", "blind_sqli": "sqli",
     "xss": "xss", "reflected_xss": "xss", "stored_xss": "xss",
@@ -118,10 +113,8 @@ class FalsePositiveValidator:
             raw_cat = finding.get("category", "").lower().strip()
             _severity = finding.get("severity", "Medium")  # noqa: F841
 
-            # Resolve category alias
             canonical = CATEGORY_ALIASES.get(raw_cat, raw_cat)
 
-            # Route to correct validator
             result = self._dispatch(canonical, raw_cat, finding)
             validations.append(result)
 
@@ -130,7 +123,6 @@ class FalsePositiveValidator:
                 finding["severity"] = result.adjusted_severity
                 finding["validated"] = True
                 if result.evidence_collected:
-                    # Append validation evidence to existing evidence
                     existing = finding.get("evidence", "")
                     finding["evidence"] = (
                         f"{existing}\n\n[Validation] {result.evidence_collected}"
@@ -146,7 +138,6 @@ class FalsePositiveValidator:
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Medium")
 
-        # Auto-confirm categories (headers, info, SSL, etc.)
         if raw_cat in AUTO_CONFIRM_HIGH or canonical in AUTO_CONFIRM_HIGH:
             return ValidationResult(
                 vuln_id=vuln_id, original_severity=severity,
@@ -155,11 +146,9 @@ class FalsePositiveValidator:
                 details="Informational / config-based finding — automatically confirmed.",
             )
 
-        # Pattern-confirmed categories (evidence is sufficient)
         if raw_cat in PATTERN_CONFIRM or canonical in PATTERN_CONFIRM:
             return self._validate_pattern_evidence(finding)
 
-        # Specific validators
         validators = {
             "sqli": self._validate_sqli,
             "xss": self._validate_xss,
@@ -177,7 +166,7 @@ class FalsePositiveValidator:
             "xxe": self._validate_xxe,
             "dom_xss": self._validate_dom_xss,
             "oauth": self._validate_oauth,
-            # Fuzzer / file-exposure validators — verify content is accessible
+            # Fuzzer findings need content verification, not just status codes
             "exposed_file": self._validate_exposed_resource,
             "exposed_secret": self._validate_exposed_resource,
             "exposed_admin_panel": self._validate_exposed_resource,
@@ -195,7 +184,6 @@ class FalsePositiveValidator:
         evidence = finding.get("evidence", "")
         poc = finding.get("poc", "")
 
-        # More evidence = higher confidence
         total_evidence = len(evidence) + len(poc)
         if total_evidence > 500:
             confidence = 0.95
@@ -226,11 +214,9 @@ class FalsePositiveValidator:
             return self._confirmed(vuln_id, severity, 0.85, "sqli-no-url",
                                    "No URL to re-test — accepting based on original evidence.")
 
-        # Time-based blind SQLi → timing re-confirm
         if any(k in payload.lower() for k in ("sleep", "waitfor", "pg_sleep", "benchmark")):
             return self._validate_timing(finding)
 
-        # Error-based: re-send and check for SQL error patterns
         try:
             baseline = self._get_baseline(url)
             resp = self.session.get(
@@ -251,7 +237,6 @@ class FalsePositiveValidator:
             except ImportError:
                 pass
 
-            # Response diff check
             if self._responses_differ(baseline, (resp.status_code, len(resp.text), resp.text[:500])):
                 return ValidationResult(
                     vuln_id=vuln_id, original_severity=severity,
@@ -394,7 +379,6 @@ class FalsePositiveValidator:
         except ImportError:
             pass
 
-        # Fallback: check for common file indicators
         indicators = ["root:", "[boot loader]", "<?xml", "<!DOCTYPE", "/bin/"]
         if any(ind in evidence for ind in indicators):
             return self._confirmed(vuln_id, severity, 0.92, "traversal-indicators",
@@ -447,7 +431,6 @@ class FalsePositiveValidator:
             resp = self.session.get(url, timeout=self.timeout)
             body = resp.text.lower()
 
-            # Check for CSRF token names
             csrf_names = ["csrf", "_token", "authenticity_token", "csrfmiddlewaretoken",
                          "antiforgery", "__requestverificationtoken", "xsrf"]
             has_token = any(name in body for name in csrf_names)
@@ -463,7 +446,6 @@ class FalsePositiveValidator:
         except Exception:
             pass
 
-        # If we have a PoC, the finding is strong
         if finding.get("poc"):
             return self._confirmed(vuln_id, severity, 0.90, "csrf-poc-exists",
                                    "CSRF PoC HTML was generated.")
@@ -523,10 +505,8 @@ class FalsePositiveValidator:
             return self._confirmed(vuln_id, severity, 0.85, "idor-no-url",
                                    "IDOR confirmed from evidence.")
 
-        # Try to fetch adjacent IDs and compare
         try:
             resp1 = self.session.get(url, timeout=self.timeout)
-            # Try ID manipulation
             test_url = re.sub(r'/(\d+)', lambda m: f"/{int(m.group(1)) + 1}", url)
             if test_url != url:
                 resp2 = self.session.get(test_url, timeout=self.timeout)
@@ -571,7 +551,6 @@ class FalsePositiveValidator:
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
 
-        # Race conditions are confirmed by the scanner's concurrent analysis
         indicators = ["concurrent", "duplicate", "multiple", "race", "success"]
         matches = sum(1 for ind in indicators if ind in evidence.lower())
 
@@ -592,7 +571,6 @@ class FalsePositiveValidator:
         severity = finding.get("severity", "Critical")
         evidence = finding.get("evidence", "")
 
-        # Smuggling is confirmed by timing differentials
         if "timing" in evidence.lower() or "delay" in evidence.lower() or "differential" in evidence.lower():
             return ValidationResult(
                 vuln_id=vuln_id, original_severity=severity,
@@ -610,7 +588,6 @@ class FalsePositiveValidator:
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
 
-        # Check for internal network indicators
         internal_indicators = [
             "127.0.0.1", "localhost", "169.254.169.254", "10.", "172.16.",
             "192.168.", "metadata", "computeMetadata", "internal",
@@ -653,7 +630,6 @@ class FalsePositiveValidator:
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
 
-        # DOM XSS is confirmed by static analysis of JavaScript
         dom_sinks = ["innerHTML", "document.write", "eval(", "outerHTML",
                      ".html(", "setAttribute", "insertAdjacentHTML"]
         dom_sources = ["location.hash", "location.search", "document.URL",
@@ -715,7 +691,6 @@ class FalsePositiveValidator:
         severity = finding.get("severity", "Medium")
         status_code = finding.get("status_code", 0)
 
-        # If the original finding already has a non-200 status, reject immediately
         if status_code in (401, 403):
             return self._not_confirmed(vuln_id, severity, "blocked-response",
                                         f"Server correctly blocks access (HTTP {status_code}). Not a vulnerability.")
@@ -731,7 +706,6 @@ class FalsePositiveValidator:
             return self._not_confirmed(vuln_id, severity, "unreachable",
                                         "Could not reach URL on re-test.")
 
-        # Must be accessible (200)
         if resp.status_code not in (200, 201, 206):
             return self._not_confirmed(vuln_id, severity, "not-accessible",
                                         f"Re-test returned HTTP {resp.status_code}. Resource is not exposed.")
@@ -739,7 +713,7 @@ class FalsePositiveValidator:
         body = resp.text.lower() if resp.text else ""
         body_len = len(resp.content)
 
-        # Reject CDN/WAF block pages served as 200
+        # Some WAFs return 200 with a block page
         block_patterns = [
             "access denied", "error from cloudfront",
             "checking your browser", "attention required",
@@ -749,7 +723,6 @@ class FalsePositiveValidator:
             return self._not_confirmed(vuln_id, severity, "waf-block-page",
                                         "Response is a WAF/CDN block page served as 200.")
 
-        # Reject soft 404s
         soft_404_patterns = [
             "page not found", "404 not found", "not found",
             "the page you requested", "does not exist",
@@ -758,7 +731,6 @@ class FalsePositiveValidator:
             return self._not_confirmed(vuln_id, severity, "soft-404",
                                         "Response appears to be a custom 404 page.")
 
-        # Content actually accessible — confirmed
         return ValidationResult(
             vuln_id=vuln_id, original_severity=severity,
             confirmed=True, confidence=0.95, adjusted_severity=severity,
@@ -779,7 +751,6 @@ class FalsePositiveValidator:
             return self._confirmed(vuln_id, severity, 0.85, "timing-no-url",
                                    "No URL for timing test — accepting from evidence.")
 
-        # Get baseline timing
         baseline_times = []
         for _ in range(2):
             try:
@@ -791,7 +762,6 @@ class FalsePositiveValidator:
 
         avg_baseline = sum(baseline_times) / len(baseline_times) if baseline_times else 0
 
-        # Test with payload
         delays_observed = 0
         for _ in range(TIMING_RETRIES):
             try:
@@ -832,12 +802,10 @@ class FalsePositiveValidator:
         poc = finding.get("poc", "")
         status_code = finding.get("status_code", 0)
 
-        # Reject findings from blocked responses (403/401)
         if status_code in (401, 403):
             return self._not_confirmed(vuln_id, severity, "blocked-response",
                                         f"Server correctly blocks access (HTTP {status_code}). Not a vulnerability.")
 
-        # Reject findings with CDN/WAF block evidence
         evidence_lower = evidence.lower()
         block_patterns = ["access denied", "forbidden", "errors.edgesuite",
                           "cloudflare", "incapsula", "checking your browser"]
@@ -853,7 +821,6 @@ class FalsePositiveValidator:
         elif total > 50:
             confidence = 0.85
         else:
-            # Very thin evidence — reject
             return self._not_confirmed(vuln_id, severity, "insufficient-evidence",
                                         f"Evidence too thin ({total} chars). Cannot confirm.")
 

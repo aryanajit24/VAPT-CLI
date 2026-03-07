@@ -1,4 +1,4 @@
-"""Tests for v8.0 modules: AI Triage, Session Manager, OOB Server, Exploit Validator, Browser, CodeScanner."""
+"""Tests for v8 engine modules: AI Triage, Session Manager, OOB Server, Exploit Validator, Browser, CodeScanner."""
 import json
 import os
 import tempfile
