@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VAPT CLI — Bug Bounty Report: {{ target }}</title>
+    <style>
+        :root {
+            --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+            --border: #30363d; --text: #e6edf3; --dim: #8b949e;
+            --blue: #58a6ff; --green: #3fb950; --yellow: #d29922;
+            --orange: #f0883e; --red: #f85149; --purple: #bc8cff;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', -apple-system, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+        header { background: linear-gradient(135deg, #1f6feb 0%, #0d419d 100%); padding: 2rem 2.5rem; border-radius: 12px; margin-bottom: 2rem; position: relative; overflow: hidden; }
+        header::after { content: ''; position: absolute; top: -50%; right: -20%; width: 50%; height: 200%; background: rgba(255,255,255,0.03); transform: rotate(15deg); }
+        header h1 { font-size: 2rem; letter-spacing: 2px; margin-bottom: 0.5rem; }
+        header .meta { display: flex; gap: 2rem; flex-wrap: wrap; opacity: 0.9; font-size: 0.95rem; }
+        header .meta span { display: flex; align-items: center; gap: 0.3rem; }
+
+        .risk-badge { display: inline-flex; align-items: center; padding: 0.4rem 1.2rem; border-radius: 20px; font-weight: bold; font-size: 1rem; text-transform: uppercase; }
+        .risk-critical { background: var(--red); color: #fff; }
+        .risk-high { background: var(--orange); color: #000; }
+        .risk-medium { background: var(--yellow); color: #000; }
+        .risk-low { background: var(--green); color: #000; }
+        .risk-info { background: var(--blue); color: #000; }
+
+        .score-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; margin-bottom: 2rem; }
+        .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.2rem; margin-top: 1rem; }
+        .score-card { background: var(--bg3); border-radius: 8px; padding: 1.2rem; text-align: center; }
+        .score-card .number { font-size: 2.5rem; font-weight: bold; }
+        .score-card .label { color: var(--dim); font-size: 0.85rem; margin-top: 0.3rem; }
+
+        .section { margin-bottom: 2.5rem; }
+        h2 { color: var(--blue); border-bottom: 2px solid var(--bg3); padding-bottom: 0.5rem; margin-bottom: 1.5rem; font-size: 1.4rem; }
+
+        .finding-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1.5rem; overflow: hidden; transition: border-color 0.2s; }
+        .finding-card:hover { border-color: var(--blue); }
+        .finding-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; }
+        .finding-header .title { font-weight: 600; font-size: 1.05rem; }
+        .finding-header .badges { display: flex; gap: 0.5rem; align-items: center; }
+        .sev-badge { padding: 0.2rem 0.8rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+        .sev-critical { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid var(--red); }
+        .sev-high { background: rgba(240,136,62,0.15); color: var(--orange); border: 1px solid var(--orange); }
+        .sev-medium { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid var(--yellow); }
+        .sev-low { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid var(--green); }
+        .sev-info { background: rgba(88,166,255,0.15); color: var(--blue); border: 1px solid var(--blue); }
+
+        .finding-body { padding: 0 1.5rem 1.5rem; }
+        .finding-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+        .finding-field { background: var(--bg); border-radius: 6px; padding: 0.8rem 1rem; }
+        .finding-field .field-label { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem; }
+        .finding-field .field-value { font-size: 0.95rem; word-break: break-all; }
+
+        .evidence-block { background: var(--bg); border-left: 3px solid var(--blue); border-radius: 4px; padding: 1rem 1.2rem; margin: 0.8rem 0; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.85rem; white-space: pre-wrap; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+        .poc-block { background: var(--bg); border-left: 3px solid var(--red); border-radius: 4px; padding: 1rem 1.2rem; margin: 0.8rem 0; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.85rem; white-space: pre-wrap; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+        .remediation-block { background: rgba(63,185,80,0.05); border-left: 3px solid var(--green); border-radius: 4px; padding: 1rem 1.2rem; margin: 0.8rem 0; }
+
+        .confidence-bar { display: inline-flex; align-items: center; gap: 0.4rem; }
+        .confidence-track { width: 60px; height: 6px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+        .confidence-fill { height: 6px; border-radius: 3px; background: var(--green); }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th { background: var(--bg3); color: var(--dim); text-align: left; padding: 0.7rem 1rem; border-bottom: 2px solid var(--border); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+        td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--bg3); vertical-align: top; }
+        tr:hover td { background: var(--bg2); }
+
+        .tag { display: inline-block; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.6rem; margin: 0.1rem; font-size: 0.8rem; }
+        .chain-block { background: rgba(218,54,51,0.05); border-left: 4px solid var(--red); padding: 1rem 1.2rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem; }
+        .footer { text-align: center; color: var(--dim); margin-top: 3rem; padding: 1.5rem; border-top: 1px solid var(--bg3); font-size: 0.9rem; }
+
+        @media print {
+            body { background: #fff; color: #000; }
+            .container { max-width: none; }
+            header { background: #1f6feb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .finding-card { break-inside: avoid; }
+            .evidence-block, .poc-block { max-height: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>&#x1F6E1; VAPT CLI — Bug Bounty Report</h1>
+        <div class="meta">
+            <span>&#x1F3AF; <strong>{{ target }}</strong></span>
+            <span>&#x1F4C5; {{ generated_at }}</span>
+            <span>&#x1F50D; {{ findings | length }} findings</span>
+            <span>&#x2705; v8.0 Professional Scanner</span>
+        </div>
+    </header>
+
+    <!-- Risk Score -->
+    <div class="section score-box">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h2 style="margin-top:0; border:none; padding:0;">Risk Assessment</h2>
+                <span class="risk-badge risk-{{ risk_level }}">{{ risk_level }}</span>
+            </div>
+            <div style="text-align: right;">
+                <div class="score-card" style="background: transparent;">
+                    <div class="number" style="color: {% if risk_level == 'critical' %}var(--red){% elif risk_level == 'high' %}var(--orange){% elif risk_level == 'medium' %}var(--yellow){% else %}var(--green){% endif %}">
+                        {{ overall_score }}<small style="font-size: 1rem">/100</small>
+                    </div>
+                    <div class="label">Risk Score</div>
+                </div>
+            </div>
+        </div>
+        <div class="score-grid">
+            <div class="score-card">
+                <div class="number" style="color: var(--red);">{{ findings | selectattr('severity', 'equalto', 'Critical') | list | length }}</div>
+                <div class="label">Critical</div>
+            </div>
+            <div class="score-card">
+                <div class="number" style="color: var(--orange);">{{ findings | selectattr('severity', 'equalto', 'High') | list | length }}</div>
+                <div class="label">High</div>
+            </div>
+            <div class="score-card">
+                <div class="number" style="color: var(--yellow);">{{ findings | selectattr('severity', 'equalto', 'Medium') | list | length }}</div>
+                <div class="label">Medium</div>
+            </div>
+            <div class="score-card">
+                <div class="number" style="color: var(--green);">{{ findings | selectattr('severity', 'equalto', 'Low') | list | length }}</div>
+                <div class="label">Low</div>
+            </div>
+            <div class="score-card">
+                <div class="number" style="color: var(--blue);">{{ findings | selectattr('severity', 'equalto', 'Info') | list | length }}</div>
+                <div class="label">Info</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Findings Summary Table -->
+    {% if findings %}
+    <div class="section">
+        <h2>📊 Findings Summary</h2>
+        <table>
+            <thead>
+                <tr><th>#</th><th>Severity</th><th>CVSS</th><th>CWE</th><th>Title</th><th>URL</th></tr>
+            </thead>
+            <tbody>
+            {% for f in findings %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><span class="sev-badge sev-{{ f.severity | default('info') | lower }}" style="font-size: 0.7rem; padding: 0.1rem 0.5rem;">{{ f.severity | default('Info') | upper }}</span></td>
+                    <td>{{ f.cvss_score | default('-') }}</td>
+                    <td style="font-family: monospace; font-size: 0.85rem;">{{ f.cwe | default('-') }}</td>
+                    <td><a href="#finding-{{ loop.index }}" style="color: var(--blue); text-decoration: none;">{{ f.title | default('N/A') }}</a></td>
+                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem;">{{ f.url | default(target) }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Detailed Findings -->
+    <div class="section">
+        <h2>&#x1F50D; Vulnerability Findings ({{ findings | length }})</h2>
+        {% if findings %}
+        {% for f in findings %}
+        <div class="finding-card" id="finding-{{ loop.index }}">
+            <div class="finding-header">
+                <div>
+                    <span style="color: var(--dim); font-size: 0.85rem;">#{{ loop.index }} — {{ f.vuln_id | default('N/A') }}</span>
+                    <div class="title">{{ f.title | default('Unnamed Vulnerability') }}</div>
+                </div>
+                <div class="badges">
+                    {% if f.confidence is defined and f.confidence %}
+                    <div class="confidence-bar">
+                        <span style="font-size: 0.75rem; color: var(--dim);">{{ (f.confidence * 100) | int }}%</span>
+                        <div class="confidence-track">
+                            <div class="confidence-fill" style="width: {{ (f.confidence * 100) | int }}%;{% if f.confidence < 0.5 %} background: var(--red);{% elif f.confidence < 0.8 %} background: var(--yellow);{% endif %}"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <span class="sev-badge sev-{{ f.severity | default('info') | lower }}">
+                        {{ f.severity | default('info') | upper }}
+                    </span>
+                    {% if f.cvss_score is defined and f.cvss_score %}
+                    <span class="tag">CVSS {{ f.cvss_score }}</span>
+                    {% endif %}
+                    {% if f.cwe is defined and f.cwe %}
+                    <span class="tag" style="border-color: var(--purple); color: var(--purple);">{{ f.cwe }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="finding-body">
+                {% if f.description is defined and f.description %}
+                <div style="margin-bottom: 1rem; padding: 0.8rem 1rem; background: var(--bg); border-radius: 6px; line-height: 1.7;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📖 Description</div>
+                    {{ f.description }}
+                </div>
+                {% endif %}
+
+                <div class="finding-grid">
+                    <div class="finding-field">
+                        <div class="field-label">URL</div>
+                        <div class="field-value">{{ f.url | default(target) }}</div>
+                    </div>
+                    <div class="finding-field">
+                        <div class="field-label">Category</div>
+                        <div class="field-value">{{ f.category | default('N/A') }}</div>
+                    </div>
+                    {% if f.parameter is defined and f.parameter %}
+                    <div class="finding-field">
+                        <div class="field-label">Parameter</div>
+                        <div class="field-value">{{ f.parameter }}</div>
+                    </div>
+                    {% endif %}
+                    {% if f.scanner is defined and f.scanner %}
+                    <div class="finding-field">
+                        <div class="field-label">Scanner Module</div>
+                        <div class="field-value">{{ f.scanner }}</div>
+                    </div>
+                    {% endif %}
+                    {% if f.cvss_vector is defined and f.cvss_vector %}
+                    <div class="finding-field" style="grid-column: 1 / -1;">
+                        <div class="field-label">CVSS Vector</div>
+                        <div class="field-value" style="font-family: monospace; font-size: 0.85rem;">{{ f.cvss_vector }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if f.impact is defined and f.impact %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">💥 Business Impact</div>
+                    <div style="background: rgba(248,81,73,0.06); border-left: 3px solid var(--red); border-radius: 4px; padding: 0.8rem 1.2rem; line-height: 1.7;">{{ f.impact }}</div>
+                </div>
+                {% endif %}
+
+                {% if f.steps_to_reproduce is defined and f.steps_to_reproduce %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">🔢 Steps to Reproduce</div>
+                    <div style="background: var(--bg); border-left: 3px solid var(--yellow); border-radius: 4px; padding: 1rem 1.2rem;">
+                        <ol style="margin: 0; padding-left: 1.5rem; line-height: 2;">
+                        {% for step in f.steps_to_reproduce %}
+                            <li style="margin-bottom: 0.3rem;">{{ step }}</li>
+                        {% endfor %}
+                        </ol>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if f.evidence is defined and f.evidence %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📋 Evidence</div>
+                    <div class="evidence-block">{{ f.evidence }}</div>
+                </div>
+                {% endif %}
+
+                {% if f.payload is defined and f.payload %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">💣 Payload</div>
+                    <div class="evidence-block" style="border-color: var(--orange);">{{ f.payload }}</div>
+                </div>
+                {% endif %}
+
+                {% if f.poc is defined and f.poc %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">🧪 Proof of Concept</div>
+                    <div class="poc-block">{{ f.poc }}</div>
+                </div>
+                {% endif %}
+
+                {% if f.request is defined and f.request %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📨 HTTP Request</div>
+                    <div class="evidence-block" style="border-color: var(--purple);">{{ f.request }}</div>
+                </div>
+                {% endif %}
+
+                {% if f.response is defined and f.response %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📩 HTTP Response</div>
+                    <div class="evidence-block" style="border-color: var(--green);">{{ f.response }}</div>
+                </div>
+                {% endif %}
+
+                {% if f.remediation is defined and f.remediation %}
+                <div style="margin-top: 0.8rem;">
+                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">✅ Remediation</div>
+                    <div class="remediation-block">{{ f.remediation }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="color: var(--green); text-align: center; padding: 2rem;">&#x2713; No vulnerabilities detected. Target appears secure.</p>
+        {% endif %}
+    </div>
+
+    {% if attack_chains %}
+    <div class="section">
+        <h2>&#x26A0; Attack Chains</h2>
+        {% for chain in attack_chains %}
+        <div class="chain-block">
+            <strong>{{ chain.description }}</strong><br>
+            <span class="tag" style="margin-top: 0.5rem;">{{ chain.categories | join(' &rarr; ') }}</span>
+            {% if chain.impact is defined %}
+            <div style="margin-top: 0.5rem; color: var(--dim);">Impact: {{ chain.impact }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if compliance %}
+    <div class="section">
+        <h2>&#x1F4CB; Compliance Dashboard</h2>
+        <table>
+            <thead>
+                <tr><th>Framework</th><th>Status</th><th>Triggered Controls</th></tr>
+            </thead>
+            <tbody>
+            {% for framework, info in compliance.items() %}
+                <tr>
+                    <td><strong>{{ framework }}</strong></td>
+                    <td style="color: {% if info.status == 'compliant' %}var(--green){% else %}var(--red){% endif %}">
+                        {{ info.status | upper }}
+                    </td>
+                    <td>
+                        {% for ctrl in info.triggered_controls %}
+                        <span class="tag">{{ ctrl }}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if scan is defined and scan.scan_config is defined %}
+    <div class="section">
+        <h2>&#x2699; Scan Configuration</h2>
+        <div class="finding-grid">
+            {% for key, value in scan.scan_config.items() %}
+            <div class="finding-field">
+                <div class="field-label">{{ key | replace('_', ' ') | title }}</div>
+                <div class="field-value">{{ value }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <strong>VAPT CLI v8.0</strong> — Professional Bug Bounty Scanner<br>
+        <span style="font-size: 0.8rem; opacity: 0.7;">All findings enriched with CWE, CVSS vector, step-by-step PoC, and real HTTP evidence. Report generated automatically.</span>
+    </div>
+</div>
+</body>
+</html>

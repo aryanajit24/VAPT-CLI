@@ -1,0 +1,117 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Optus Bug Bounty — Bugcrowd Scope File
+# Program: https://bugcrowd.com/optus
+# Double Bounty: Feb 23 – March 23, 2026 (2x payouts!)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ── In-scope targets ────────────────────────────────────────────────────
+in_scope:
+  # Web targets
+  - "*.optus.com.au"
+  - "webmail.optusnet.com.au"
+  - "ogws.optusnet.com.au"
+  - "oes.optusnet.com.au"
+  - "optus.my.site.com"
+  - "ddosportal.optus.com.au"
+  # AI Search API
+  - "gateway.optus.com.au"
+  # Infrastructure
+  - "vpn01.syd.optusnet.com.au"
+  - "naasapi.optus.com.au"
+  - "ras1.optus.com.au"
+  # DNS
+  - "ns1.optusnet.com.au"
+  - "ns2.optusnet.com.au"
+  - "dns0.optus.net.au"
+  - "dns1.optus.net.au"
+  # Speedtest servers
+  - "speedtest-sydney.optusnet.com.au"
+  - "speedtest-newcastle.optusnet.com.au"
+  - "speedtest-blacktown.optusnet.com.au"
+  - "speedtest-melbourne.optusnet.com.au"
+  - "speedtest-geelong.optusnet.com.au"
+  - "speedtest-hobart.optusnet.com.au"
+  - "speedtest-perth.optusnet.com.au"
+  - "speedtest-broome.optusnet.com.au"
+  - "speedtest-rockingham.optusnet.com.au"
+  - "speedtest-eastburwood.optusnet.com.au"
+  - "speedtest-brisbane.optusnet.com.au"
+  - "speedtest-goldcoast.optusnet.com.au"
+  - "speedtest-townsville.optusnet.com.au"
+  # Network IPs
+  - "58.108.136.4"
+  - "172.24.250.128"
+  - "198.142.65.253"
+  - "203.13.98.3"
+  - "198.142.235.18"
+  - "211.29.133.33"
+  - "211.29.132.28"
+  - "211.31.132.13"
+  - "211.31.132.14"
+  - "211.29.132.82"
+  - "211.29.132.101"
+  - "211.31.132.15"
+  - "211.31.132.152"
+  - "211.29.152.243"
+  - "211.29.133.32"
+  - "198.142.152.60"
+  - "198.142.152.35"
+  - "198.142.152.43"
+  - "211.31.132.89"
+  - "211.29.93.8"
+  - "198.142.205.252"
+  - "198.142.205.253"
+  - "198.142.205.254"
+  - "198.142.205.244"
+  - "198.142.205.245"
+  # CIDR ranges
+  - "202.139.138.208/28"
+  - "203.13.127.0/24"
+  - "203.13.128.128/27"
+  - "203.13.129.0/24"
+  - "203.16.75.0/24"
+  - "203.13.98.0/26"
+  - "203.13.98.144/28"
+  - "203.13.125.32/27"
+  - "203.13.128.0/27"
+  - "203.13.128.64/27"
+  - "203.13.128.160/27"
+  - "203.13.128.192/26"
+  - "203.16.76.0/27"
+  - "203.16.76.32/27"
+  - "203.16.76.64/27"
+  - "203.16.76.96/27"
+
+# ── Out-of-scope targets ───────────────────────────────────────────────
+out_of_scope:
+  - "www.optus.com.au/portal/*"
+  - "personal.optus.com.au"
+  - "yes4good.optus.com.au"
+  - "*.optus.com.au/web/ocaportal.portal"
+  - "ibs.optus.com.au"
+  - "ibs2.optus.com.au"
+  - "*.nsw.optusnet.com.au"
+  - "*.vic.optusnet.com.au"
+  - "*.wa.optusnet.com.au"
+  - "*.sa.optusnet.com.au"
+  - "*.qld.optusnet.com.au"
+  - "*.nt.optusnet.com.au"
+  - "*.act.optusnet.com.au"
+  - "*.tas.optusnet.com.au"
+  - "103.213.120.0/24"
+  - "103.213.121.0/24"
+  # Optus Sport — ALL out of scope
+  - "sport.optus.com.au"
+  - "*.optussport.tv"
+  - "*.optussport.info"
+  - "*.sport.optus.com.au"
+  - "samsung-pp.optussport.tv"
+  - "chromecast-pp.optussport.tv"
+  - "chromecast.optussport.tv"
+  - "samsung.optussport.tv"
+  - "cms.optussport.tv"
+  - "cms-uat.optussport.tv"
+  - "cms-qa.optussport.tv"
+
+# ── Filtering ──────────────────────────────────────────────────────────
+min_severity: low

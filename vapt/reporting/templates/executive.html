@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VAPT CLI — Executive Summary: {{ target }}</title>
+    <style>
+        body { font-family: Georgia, 'Times New Roman', serif; background: #fff; color: #1a1a2e; margin: 0; padding: 0; }
+        .page { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+        .cover { text-align: center; padding: 5rem 2rem; border-bottom: 4px solid #1f6feb; margin-bottom: 3rem; }
+        .cover h1 { font-size: 2.8rem; color: #0d419d; margin-bottom: 0.5rem; }
+        .cover h2 { font-size: 1.4rem; color: #444; font-weight: normal; }
+        .cover .target { font-size: 1.1rem; background: #f0f6ff; border: 1px solid #cfe2ff; border-radius: 8px; padding: 0.8rem 1.5rem; display: inline-block; margin-top: 1rem; }
+        .risk-overview { display: flex; gap: 2rem; margin: 2rem 0; flex-wrap: wrap; }
+        .risk-card { flex: 1; min-width: 160px; padding: 1.5rem; border-radius: 10px; text-align: center; border: 2px solid; }
+        .card-critical { border-color: #da3633; background: #fff5f5; }
+        .card-high { border-color: #f0883e; background: #fff9f0; }
+        .card-medium { border-color: #d29922; background: #fffbf0; }
+        .card-low { border-color: #3fb950; background: #f0fff4; }
+        .card-count { font-size: 2.5rem; font-weight: bold; }
+        .card-label { font-size: 0.9rem; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+        .section { margin: 2.5rem 0; }
+        h3 { color: #0d419d; border-left: 4px solid #1f6feb; padding-left: 0.8rem; }
+        .finding-row { background: #f8f9fa; border-radius: 6px; padding: 1rem; margin-bottom: 0.8rem; border-left: 4px solid #dee2e6; }
+        .finding-row.critical { border-left-color: #da3633; }
+        .finding-row.high { border-left-color: #f0883e; }
+        .finding-row.medium { border-left-color: #d29922; }
+        .finding-title { font-weight: bold; font-size: 1rem; }
+        .finding-meta { color: #666; font-size: 0.85rem; margin-top: 0.3rem; }
+        .recommendation { background: #f0fff4; border: 1px solid #3fb950; border-radius: 8px; padding: 1rem; margin-bottom: 0.8rem; }
+        .score-hero { text-align: center; font-size: 5rem; font-weight: bold; color: #0d419d; margin: 1rem 0; }
+        .footer { text-align: center; color: #999; border-top: 2px solid #dee2e6; padding-top: 1.5rem; margin-top: 3rem; font-size: 0.85rem; }
+        @media print {
+            body { background: white; }
+            .page { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="cover">
+        <h1>&#x1F6E1; Executive Security Summary</h1>
+        <h2>Vulnerability Assessment &amp; Penetration Test Report</h2>
+        <div class="target">
+            Target: <strong>{{ target }}</strong><br>
+            Assessment Date: {{ generated_at }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Overall Risk Score</h3>
+        <div class="score-hero">
+            {{ overall_score }}<span style="font-size:2rem">/100</span>
+        </div>
+        <p style="text-align:center; font-size: 1.2rem;">
+            Risk Level:
+            <strong style="color:
+                {% if risk_level == 'critical' %}#da3633
+                {% elif risk_level == 'high' %}#f0883e
+                {% elif risk_level == 'medium' %}#d29922
+                {% else %}#3fb950{% endif %}">
+                {{ risk_level | upper }}
+            </strong>
+        </p>
+    </div>
+
+    <div class="section">
+        <h3>Vulnerability Distribution</h3>
+        <div class="risk-overview">
+            {% set critical_count = findings | selectattr('severity', 'equalto', 'critical') | list | length %}
+            {% set high_count = findings | selectattr('severity', 'equalto', 'high') | list | length %}
+            {% set medium_count = findings | selectattr('severity', 'equalto', 'medium') | list | length %}
+            {% set low_count = findings | selectattr('severity', 'equalto', 'low') | list | length %}
+            <div class="risk-card card-critical">
+                <div class="card-count">{{ critical_count }}</div>
+                <div class="card-label">Critical</div>
+            </div>
+            <div class="risk-card card-high">
+                <div class="card-count">{{ high_count }}</div>
+                <div class="card-label">High</div>
+            </div>
+            <div class="risk-card card-medium">
+                <div class="card-count">{{ medium_count }}</div>
+                <div class="card-label">Medium</div>
+            </div>
+            <div class="risk-card card-low">
+                <div class="card-count">{{ low_count }}</div>
+                <div class="card-label">Low</div>
+            </div>
+        </div>
+    </div>
+
+    {% if findings %}
+    <div class="section">
+        <h3>Top Findings</h3>
+        {% for f in findings[:10] %}
+        <div class="finding-row {{ f.severity | default('info') | lower }}">
+            <div class="finding-title">{{ f.title | default('Unknown Finding') }}</div>
+            <div class="finding-meta">
+                Severity: <strong>{{ f.severity | upper }}</strong> &bull;
+                CVSS: {{ f.cvss_score | default('N/A') }} &bull;
+                Category: {{ f.category | default('—') }} &bull;
+                ID: {{ f.vuln_id | default('—') }}
+            </div>
+            <div style="margin-top:0.4rem; font-size:0.9rem;">{{ f.description | default('') | truncate(200) }}</div>
+        </div>
+        {% endfor %}
+        {% if findings | length > 10 %}
+        <p><em>... and {{ findings | length - 10 }} more findings. See full report for details.</em></p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if attack_chains %}
+    <div class="section">
+        <h3>&#x26A0; Attack Chains Detected</h3>
+        {% for chain in attack_chains %}
+        <div class="recommendation" style="background:#fff5f5; border-color:#da3633;">
+            <strong>{{ chain.description }}</strong><br>
+            <small>Involved categories: {{ chain.categories | join(' + ') }}</small>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <h3>Recommendations</h3>
+        <div class="recommendation">
+            <strong>1. Prioritize critical and high severity findings immediately.</strong><br>
+            Address any SQL injection, authentication bypass, or RCE vulnerabilities before anything else.
+        </div>
+        <div class="recommendation">
+            <strong>2. Harden TLS configuration.</strong><br>
+            Ensure TLS 1.2 minimum (prefer 1.3), disable weak cipher suites, and enforce HSTS.
+        </div>
+        <div class="recommendation">
+            <strong>3. Implement security headers.</strong><br>
+            Deploy CSP, X-Frame-Options, X-Content-Type-Options, and Referrer-Policy on all responses.
+        </div>
+        <div class="recommendation">
+            <strong>4. Apply principle of least privilege.</strong><br>
+            Close all unnecessary open ports and restrict API access with proper authentication.
+        </div>
+        <div class="recommendation">
+            <strong>5. Schedule regular assessments.</strong><br>
+            Run VAPT CLI continuously with the monitor module to detect new exposures in real time.
+        </div>
+    </div>
+
+    <div class="footer">
+        <strong>VAPT CLI v8.0</strong> — Professional. Open. Secure.<br>
+        This report is confidential and intended for authorized personnel only.
+    </div>
+</div>
+</body>
+</html>

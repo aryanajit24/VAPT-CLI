@@ -1,0 +1,47 @@
+# Example YAML plugin for VAPT-CLI
+# Place .yaml files in vapt/plugins/ to auto-load them
+# ──────────────────────────────────────────────────────
+
+name: Example Security Checks
+description: Sample plugin demonstrating YAML-based custom security checks
+version: 1.0.0
+author: VAPT-CLI
+category: custom
+
+checks:
+  - path: /admin
+    match_status: 200
+    vuln_id: PLUGIN-001
+    title: Admin Panel Publicly Accessible
+    severity: High
+    remediation: Restrict admin panel access to authorized IP ranges and require authentication.
+
+  - path: /
+    match_header: X-Powered-By
+    vuln_id: PLUGIN-002
+    title: Technology Disclosure via X-Powered-By Header
+    severity: Low
+    remediation: Remove the X-Powered-By header from server responses.
+
+  - path: /
+    not_match_header: Content-Security-Policy
+    match_status: 200
+    vuln_id: PLUGIN-003
+    title: Missing Content-Security-Policy Header
+    severity: Medium
+    remediation: Implement a strict Content-Security-Policy header.
+
+  - path: /phpinfo.php
+    match_body: "phpinfo\\(\\)"
+    vuln_id: PLUGIN-004
+    title: phpinfo() Page Exposed
+    severity: High
+    remediation: Remove phpinfo.php from production servers.
+
+  - path: /.well-known/security.txt
+    match_status: 200
+    match_body: "Contact:"
+    vuln_id: PLUGIN-005
+    title: security.txt Present (Informational)
+    severity: Info
+    remediation: No action needed — this is a best practice.

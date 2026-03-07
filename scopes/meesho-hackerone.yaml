@@ -1,0 +1,94 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Meesho Bug Bounty — HackerOne Scope File
+# Program: https://hackerone.com/meesho
+# Researcher: sacredone
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ── In-scope targets (Critical Eligible) ────────────────────────────────
+in_scope:
+  # Web & Platform (Critical Eligible)
+  - "www.meesho.com"
+  - "supplier.meesho.com"
+  - "affiliate.meesho.com"
+  - "admin.meeshosupply.com"
+  - "www.valmo.in"
+  - "superstoreapp.meesho.com"
+  # API (Critical Eligible)
+  - "prod.meeshoapi.com"
+
+# ── Out-of-scope targets ───────────────────────────────────────────────
+out_of_scope:
+  # Explicitly ineligible domains
+  - "warehouse.meesho.com"
+  - "investor.meesho.com"
+  - "agency.meesho.com"
+  - "grocery-supplier.meesho.com"
+  - "di-prd-superset.meesho.com"
+  - "affiliate-c.meesho.com"
+  - "farmiso.meeshosupply.com"
+  # Valmo ineligible
+  - "console.valmo.in"
+  - "atlas.valmo.in"
+  - "log10-web-staging.valmo.in"
+  # Wildcards — only specific in-scope assets are allowed
+  - "*.meesho.io"
+  - "*.meeshogcp.in"
+  - "*.meeshoaiservices.ai"
+  # Third-party / vendor systems
+  - "payment.*"
+  - "analytics.*"
+
+# ── Excluded vulnerability categories ──────────────────────────────────
+# Based on Meesho's extensive out-of-scope list
+excluded_categories:
+  - "dos"
+  - "ddos"
+  - "brute_force"
+  - "rate_limiting"
+  - "clickjacking"
+  - "cache_deception"
+  - "self_xss"
+  - "content_spoofing"
+  - "text_injection"
+  - "security_header"
+  - "ssl_tls"
+  - "cookie_flag"
+  - "hsts"
+  - "username_enumeration"
+  - "email_enumeration"
+  - "spf"
+  - "dkim"
+  - "dmarc"
+  - "directory_listing"
+  - "path_disclosure"
+  - "stack_trace"
+  - "banner_disclosure"
+  - "service_fingerprint"
+  - "robots_txt"
+  - "missing_cert_pinning"
+  - "root_detection"
+  - "code_obfuscation"
+  - "tab_nabbing"
+  - "task_hijacking"
+  - "weak_password_policy"
+  - "social_engineering"
+  - "physical_access"
+
+# ── Minimum severity (skip info-only findings) ─────────────────────────
+min_severity: low
+
+# ── Modules to run ─────────────────────────────────────────────────────
+modules:
+  - recon
+  - port
+  - ssl
+  - web
+  - dom
+  - auth
+  - api
+  - fuzz
+  - jsscan
+  - race
+  - smuggle
+  - advanced
+  - cve
