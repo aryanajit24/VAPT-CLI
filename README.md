@@ -2,7 +2,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.10+-green?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-242%20passing-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-307%20passing-brightgreen?style=flat-square)
 ![License](https://img.shields.io/github/license/aryanajit24/VAPT-CLI?style=flat-square)
 
 A command-line tool that finds security vulnerabilities in websites, APIs, networks, mobile apps, and source code.
@@ -242,6 +242,25 @@ vapt mobilescan --app ./target-app.apk
 ```
 
 ### Bug Bounty Modes
+
+**Autonomous hunt** (scope-driven, zero interaction — recommended):
+```sh
+vapt hunt-auto scopes/my-target.yaml
+```
+Reads a YAML scope file and runs a full 5-phase pipeline: Understand → Discover → Test → Validate → Report. Generates submission-ready PoCs and bounty reports.
+
+```sh
+# With auth (needed for IDOR/authorization testing)
+vapt hunt-auto scopes/target.yaml --cookies-a "session=abc" --cookies-b "session=xyz"
+
+# Stealth mode + proxy through Burp
+vapt hunt-auto scopes/target.yaml --rate stealth --proxy http://127.0.0.1:8080
+
+# With duplicate estimation
+vapt hunt-auto scopes/target.yaml --program-age 24 --resolved 150
+```
+
+See [docs/SCOPE_GUIDE.md](docs/SCOPE_GUIDE.md) for how to write scope YAML files.
 
 **Interactive hunt mode** (guided bug bounty hunting):
 ```sh

@@ -1,0 +1,118 @@
+# ─────────────────────────────────────────────────────────────────
+# Example Program Scope — VAPT CLI
+# ─────────────────────────────────────────────────────────────────
+# Copy this file and fill in your program's details.
+# See docs/SCOPE_GUIDE.md for a full explanation of every field.
+# ─────────────────────────────────────────────────────────────────
+
+# ── Program metadata ────────────────────────────────────────────
+program:
+  name: Example Corp                          # program name exactly as on platform
+  platform: hackerone                         # hackerone | bugcrowd | intigriti | other
+  url: https://hackerone.com/example_corp     # link to the program page
+
+# ── Scope definitions ──────────────────────────────────────────
+scope:
+  in_scope:
+    # Wildcard domains
+    - target: "*.example.com"
+      type: web                               # web | api | mobile | network | other
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: Main web properties
+
+    # Specific API endpoint
+    - target: "api.example.com"
+      type: api
+      eligible_for_bounty: true
+      max_severity: critical
+
+    # Specific IP range
+    - target: "203.0.113.0/24"
+      type: network
+      eligible_for_bounty: false
+      max_severity: high
+      notes: Network assets — no bounty but reports welcome
+
+  out_of_scope:
+    - target: "blog.example.com"
+      type: web
+      notes: Hosted on WordPress — not managed by us
+
+    - target: "status.example.com"
+      type: web
+
+    - target: "*.example-staging.com"
+      type: web
+      notes: Staging environment
+
+# ── Excluded vulnerability categories ──────────────────────────
+# Findings in these categories will be automatically filtered out.
+# Use the 'reason' field to document why (helps you remember).
+excluded_vulnerabilities:
+  - category: missing_security_headers
+    reason: Not eligible per program policy
+    detail: >
+      Missing X-Frame-Options, X-Content-Type-Options,
+      Content-Security-Policy, etc. are informational only.
+
+  - category: rate_limiting
+    reason: Out of scope
+    detail: Rate limiting is not considered a vulnerability.
+
+  - category: self_xss
+    reason: Not impactful
+    detail: Self-XSS requires social engineering.
+
+  - category: spf_dmarc
+    reason: Out of scope
+    detail: Email configuration issues are excluded.
+
+  - category: clickjacking
+    reason: Only on sensitive pages
+    detail: >
+      Clickjacking on non-state-changing pages is excluded.
+      Only report with a clear exploit chain on settings/payment pages.
+
+# ── Bounty tiers ───────────────────────────────────────────────
+# Used for payout estimation — helps prioritize findings.
+bounty:
+  - severity: critical
+    min: 5000
+    max: 25000
+  - severity: high
+    min: 2500
+    max: 5000
+  - severity: medium
+    min: 500
+    max: 2500
+  - severity: low
+    min: 100
+    max: 500
+
+# ── Testing rules ──────────────────────────────────────────────
+# Constraints that control how the tool behaves.
+testing:
+  max_requests_per_second: 10                 # respect the program's rate limits
+  no_automated_scanners: false                # set true if program bans automated tools
+  no_destructive_testing: true                # never modify/delete production data
+  required_headers:                           # custom headers to include with every request
+    X-Bug-Bounty: vapt-testing
+    X-Researcher: your-hackerone-username
+  # proxy_required: false                     # uncomment if you must route through a proxy
+
+# ── Scanner modules to run (optional) ─────────────────────────
+# Omit this section to run all modules, or list specific ones:
+# modules:
+#   - web
+#   - api
+#   - ssl
+#   - dom
+#   - auth
+#   - fuzz
+#   - cve
+#   - advanced
+#   - race
+#   - smuggle
+#   - cloud
+#   - jsscan

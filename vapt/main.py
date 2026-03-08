@@ -2273,6 +2273,79 @@ def cmd_codec(
         console.print(f"[red]Error: {exc}[/red]")
 
 
+# vapt hunt-auto — AUTONOMOUS BUG BOUNTY HUNTING MODE
+
+@app.command("hunt-auto")
+def cmd_hunt_auto(
+    scope: str = typer.Argument(..., help="Path to program scope YAML file (e.g. scopes/doordash.yaml)"),
+    output_dir: str = typer.Option("./vapt-reports", "--output", "-o", help="Output directory for reports and PoCs"),
+    rate: str = typer.Option("normal", "--rate", "-r", help="Rate profile: aggressive|normal|polite|stealth"),
+    cookies_a: Optional[str] = typer.Option(None, "--cookies-a", help="Session cookies for user A (key=val;key2=val2)"),
+    cookies_b: Optional[str] = typer.Option(None, "--cookies-b", help="Session cookies for user B (for IDOR tests)"),
+    bearer_a: Optional[str] = typer.Option(None, "--bearer-a", help="Bearer token for user A"),
+    bearer_b: Optional[str] = typer.Option(None, "--bearer-b", help="Bearer token for user B"),
+    proxy: Optional[str] = typer.Option(None, "--proxy", help="Proxy URL (http://host:port)"),
+    program_age: int = typer.Option(12, "--program-age", help="Program age in months (for duplicate estimation)"),
+    resolved: int = typer.Option(0, "--resolved", help="Number of resolved reports (for duplicate estimation)"),
+) -> None:
+    """
+    Autonomous bug bounty hunting — scope-driven, zero interaction.
+
+    \b
+    Reads a YAML scope file that describes the bug bounty program
+    (targets, rules, exclusions, bounty tiers) and runs the full
+    5-phase pipeline automatically:
+
+    \b
+      Phase 1  UNDERSTAND  — parse scope, plan strategy
+      Phase 2  DISCOVER    — recon, JS mining, endpoints
+      Phase 3  TEST        — vulnerability scanning
+      Phase 4  VALIDATE    — false-positive filtering + dedup
+      Phase 5  REPORT      — PoC generation + bounty reports
+
+    \b
+    Examples:
+      vapt hunt-auto scopes/doordash.yaml
+      vapt hunt-auto scopes/meesho-hackerone.yaml --rate stealth
+      vapt hunt-auto scope.yaml --cookies-a "session=abc" --bearer-a "eyJ..."
+      vapt hunt-auto scope.yaml --proxy http://127.0.0.1:8080
+
+    \b
+    See docs/SCOPE_GUIDE.md for how to write scope YAML files.
+    """
+    print_banner(console)
+
+    scope_path = Path(scope)
+    if not scope_path.exists():
+        console.print(f"[bold red]Scope file not found: {scope}[/bold red]")
+        raise typer.Exit(1)
+
+    from vapt.engine.hunt import HuntOrchestrator
+
+    proxies = [proxy] if proxy else None
+
+    try:
+        orch = HuntOrchestrator(
+            scope_file=str(scope_path),
+            output_dir=output_dir,
+            rate_profile=rate,
+            proxies=proxies,
+            auth_cookies_a=cookies_a,
+            auth_cookies_b=cookies_b,
+            auth_bearer_a=bearer_a,
+            auth_bearer_b=bearer_b,
+            program_age_months=program_age,
+            resolved_reports=resolved,
+        )
+        orch.run()
+    except FileNotFoundError as exc:
+        console.print(f"[bold red]Error: {exc}[/bold red]")
+        raise typer.Exit(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Hunt interrupted by user.[/yellow]")
+        raise typer.Exit(130)
+
+
 # Entry point
 
 def entry_point() -> None:
