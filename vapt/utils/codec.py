@@ -1,4 +1,3 @@
-"""Encoder, decoder, and hash identification utilities."""
 
 from __future__ import annotations
 
@@ -10,7 +9,6 @@ import json
 import math
 import re
 import urllib.parse
-from typing import Optional
 
 
 HASH_PATTERNS: list[tuple[str, str]] = [
@@ -32,9 +30,7 @@ HASH_PATTERNS: list[tuple[str, str]] = [
 
 
 class Codec:
-    """Multi-format encoder/decoder with hash identification."""
 
-    # ── Base64 ───────────────────────────────────────────────
 
     @staticmethod
     def encode_base64(data: str) -> str:
@@ -51,7 +47,6 @@ class Codec:
         except Exception:
             return base64.urlsafe_b64decode(cleaned).decode("utf-8", errors="replace")
 
-    # ── URL ──────────────────────────────────────────────────
 
     @staticmethod
     def encode_url(data: str) -> str:
@@ -65,7 +60,6 @@ class Codec:
     def encode_url_all(data: str) -> str:
         return "".join(f"%{ord(c):02X}" for c in data)
 
-    # ── Hex ──────────────────────────────────────────────────
 
     @staticmethod
     def encode_hex(data: str) -> str:
@@ -76,7 +70,6 @@ class Codec:
         cleaned = data.strip().replace(" ", "").replace("0x", "").replace("\\x", "")
         return bytes.fromhex(cleaned).decode("utf-8", errors="replace")
 
-    # ── HTML entities ────────────────────────────────────────
 
     @staticmethod
     def encode_html(data: str) -> str:
@@ -90,7 +83,6 @@ class Codec:
     def encode_html_numeric(data: str) -> str:
         return "".join(f"&#{ord(c)};" for c in data)
 
-    # ── Unicode ──────────────────────────────────────────────
 
     @staticmethod
     def encode_unicode_escape(data: str) -> str:
@@ -100,7 +92,6 @@ class Codec:
     def decode_unicode_escape(data: str) -> str:
         return data.encode("raw_unicode_escape").decode("unicode_escape")
 
-    # ── JWT ──────────────────────────────────────────────────
 
     @staticmethod
     def decode_jwt(token: str) -> dict:
@@ -124,7 +115,6 @@ class Codec:
         raw = json.dumps(data, separators=(",", ":")).encode()
         return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
-    # ── Hashing ──────────────────────────────────────────────
 
     @staticmethod
     def hash_string(data: str, algorithm: str = "sha256") -> str:
@@ -148,7 +138,6 @@ class Codec:
                 matches.append(name)
         return matches if matches else ["Unknown"]
 
-    # ── Entropy ──────────────────────────────────────────────
 
     @staticmethod
     def entropy(data: str) -> float:
@@ -162,7 +151,6 @@ class Codec:
             (count / length) * math.log2(count / length) for count in freq.values()
         )
 
-    # ── Smart decode ─────────────────────────────────────────
 
     @staticmethod
     def smart_decode(data: str) -> dict[str, object]:
@@ -205,7 +193,6 @@ class Codec:
 
         return results
 
-    # ── Regex tester ─────────────────────────────────────────
 
     @staticmethod
     def test_regex(pattern: str, text: str, flags: int = 0) -> dict:
@@ -224,7 +211,6 @@ class Codec:
             })
         return {"valid": True, "pattern": pattern, "match_count": len(matches), "matches": matches}
 
-    # ── Batch operations ─────────────────────────────────────
 
     @classmethod
     def encode_all(cls, data: str) -> dict[str, str]:

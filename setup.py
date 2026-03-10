@@ -1,4 +1,3 @@
-"""setup.py for VAPT CLI — also supports pip install -e ."""
 
 from pathlib import Path
 from setuptools import find_packages, setup
@@ -13,7 +12,6 @@ REQUIREMENTS = [
 setup(
     name="vapt-cli",
     version="1.0.0",
-    # Keep in sync with vapt/__init__.py
     author="aryanajit24",
     author_email="",  
     description="Vulnerability Assessment & Penetration Testing CLI",

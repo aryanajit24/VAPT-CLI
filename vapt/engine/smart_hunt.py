@@ -1,4 +1,3 @@
-"""Smart hunt orchestrator for targeted vulnerability discovery."""
 
 from __future__ import annotations
 
@@ -24,12 +23,6 @@ console = Console()
 
 
 class SmartHuntOrchestrator:
-    """
-    The Gold Elite Edition hunting orchestrator.
-    
-    Coordinates all new modules in a strategic sequence designed
-    to maximize the probability of finding novel, high-impact bugs.
-    """
 
     def __init__(
         self,
@@ -44,27 +37,23 @@ class SmartHuntOrchestrator:
         self.custom_headers = custom_headers or {}
         self.timeout = timeout
         
-        # Configuration
         self.program_name: str = ""
         self.platform: str = "HackerOne"
         self.scope_in: list[str] = []
         self.scope_out: list[str] = []
         
-        # Modules
         self.elite_engine = EliteIntelligenceEngine()
         self.oob_manager = OOBManager()
         self.js_recon = DeepJSRecon(timeout=timeout)
         self.biz_scanner = BusinessLogicScanner(timeout=timeout)
         self.auth_scanner = AuthFlowScanner(timeout=timeout)
         
-        # Sessions
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
         if custom_headers:
             self.session.headers.update(custom_headers)
         self.session.verify = False
         
-        # Results
         self.all_findings: list[dict] = []
         self.phase_results: dict[str, Any] = {}
         self.discovered_endpoints: list[str] = []
@@ -78,7 +67,6 @@ class SmartHuntOrchestrator:
         scope_out: list[str] | None = None,
         program_history_file: str | None = None,
     ) -> None:
-        """Configure the hunt parameters."""
         self.program_name = program_name
         self.platform = platform
         self.scope_in = scope_in or [self.target]
@@ -97,7 +85,6 @@ class SmartHuntOrchestrator:
         email_b: str | None = None,
         password_b: str | None = None,
     ) -> None:
-        """Set up authenticated sessions for testing."""
         if session_a:
             self.auth_scanner.setup_session(session_a, "A")
             self.biz_scanner.session = session_a
@@ -112,11 +99,6 @@ class SmartHuntOrchestrator:
             self.auth_scanner.setup_session(session_b, "B")
 
     def execute(self) -> dict[str, Any]:
-        """
-        Execute the full elite hunting pipeline.
-        
-        Returns comprehensive results with novelty-scored findings.
-        """
         started = time.time()
         
         console.print(Panel(
@@ -179,7 +161,6 @@ class SmartHuntOrchestrator:
         
         elapsed = time.time() - started
         
-        # Display results
         self._display_results(elapsed)
         
         return {
@@ -192,7 +173,6 @@ class SmartHuntOrchestrator:
         }
 
     def _phase_1_js_recon(self) -> None:
-        """Phase 1: Deep JavaScript reconnaissance to map the attack surface."""
         self.js_recon.session = self.session
         results = self.js_recon.run(self.target)
         
@@ -206,16 +186,12 @@ class SmartHuntOrchestrator:
             "source_maps": len(results["source_maps"]),
         }
         
-        # Collect endpoints for other phases
         self.discovered_endpoints = self.js_recon.get_endpoints_for_scanning()
         self.sensitive_endpoints = self.js_recon.get_sensitive_endpoints()
         
-        # Add JS recon findings
         self.all_findings.extend(results.get("findings", []))
 
     def _phase_2_endpoint_intel(self) -> None:
-        """Phase 2: Classify and prioritize discovered endpoints."""
-        # Already done by DeepJSRecon.get_sensitive_endpoints()
         self.phase_results["endpoint_intel"] = {
             "total_endpoints": len(self.discovered_endpoints),
             "sensitive_endpoints": len(self.sensitive_endpoints),
@@ -228,7 +204,6 @@ class SmartHuntOrchestrator:
                 self.phase_results["endpoint_intel"]["by_type"].get(ep_type, 0) + 1
 
     def _phase_3_auth_testing(self) -> None:
-        """Phase 3: Test authenticated endpoints for authorization flaws."""
         results = self.auth_scanner.run(
             self.target,
             endpoints=self.discovered_endpoints,
@@ -244,8 +219,6 @@ class SmartHuntOrchestrator:
         self.all_findings.extend(results.get("findings", []))
 
     def _phase_4_business_logic(self) -> None:
-        """Phase 4: Test business logic on sensitive endpoints."""
-        # Only test endpoints classified as financial, promo, or account-related
         sensitive_urls = [ep.get("full_url", ep.get("endpoint", "")) for ep in self.sensitive_endpoints]
         
         results = self.biz_scanner.run(
@@ -264,10 +237,8 @@ class SmartHuntOrchestrator:
         self.all_findings.extend(results.get("findings", []))
 
     def _phase_5_oob_testing(self) -> None:
-        """Phase 5: Send OOB payloads for blind vuln confirmation."""
         oob_payloads_sent = 0
         
-        # Generate SSRF payloads for file upload/URL endpoints
         for ep in self.sensitive_endpoints:
             if ep.get("sensitivity_type") in ("file_operations", "communication"):
                 payloads = self.oob_manager.generate_payloads("ssrf", ep.get("endpoint", ""))
@@ -283,7 +254,6 @@ class SmartHuntOrchestrator:
                     except Exception:
                         pass
         
-        # Poll for interactions (short wait for initial check)
         interactions = []
         if oob_payloads_sent > 0:
             interactions = self.oob_manager.poll_interactions(wait_seconds=5)
@@ -296,7 +266,6 @@ class SmartHuntOrchestrator:
             "confirmed_findings": len(confirmed),
         }
         
-        # Convert confirmed OOB interactions to findings
         for conf in confirmed:
             self.all_findings.append({
                 "id": f"OOB-{conf['label'][:20]}",
@@ -311,14 +280,12 @@ class SmartHuntOrchestrator:
             })
 
     def _phase_6_targeted_scanning(self) -> None:
-        """Phase 6: Run existing VAPT-CLI scanners on sensitive endpoints only."""
         findings_count = 0
         
         try:
             from vapt.scanner.apiscan import APIScanner
             api_scanner = APIScanner(session=self.session, timeout=self.timeout)
             
-            # Only scan sensitive endpoints, not the whole site
             for ep in self.sensitive_endpoints[:20]:
                 url = ep.get("full_url", ep.get("endpoint", ""))
                 if url:
@@ -350,7 +317,6 @@ class SmartHuntOrchestrator:
         }
 
     def _phase_7_elite_analysis(self) -> None:
-        """Phase 7: Run Elite Intelligence analysis on all findings."""
         self.all_findings = self.elite_engine.analyze(
             self.all_findings,
             target_context={
@@ -364,7 +330,6 @@ class SmartHuntOrchestrator:
         self.phase_results["elite_analysis"] = summary
 
     def _phase_8_reports(self) -> None:
-        """Phase 8: Generate elite reports for submission-ready findings."""
         ready_findings = [
             f for f in self.all_findings
             if f.get("submission_readiness") in ("ready", "needs_work")
@@ -379,12 +344,10 @@ class SmartHuntOrchestrator:
         for i, finding in enumerate(ready_findings[:10], 1):
             report = self._generate_elite_report(finding, i)
             
-            # Save report
             safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in finding.get("title", "finding"))[:50]
             report_path = self.output_dir / f"elite_{i}_{safe_title.strip().replace(' ', '_')}.md"
             report_path.write_text(report, encoding="utf-8")
             
-            # Save H1 field format
             fields = self._generate_h1_fields(finding)
             fields_path = self.output_dir / f"elite_{i}_{safe_title.strip().replace(' ', '_')}_fields.txt"
             fields_path.write_text(fields, encoding="utf-8")
@@ -394,7 +357,6 @@ class SmartHuntOrchestrator:
         self.phase_results["reports"] = {"generated": reports_generated}
 
     def _generate_elite_report(self, finding: dict, rank: int) -> str:
-        """Generate a comprehensive HackerOne-ready report."""
         title = finding.get("title", "Vulnerability Finding")
         severity = finding.get("severity", "medium").upper()
         cvss = finding.get("cvss", 0)
@@ -411,7 +373,6 @@ class SmartHuntOrchestrator:
         recommendation = finding.get("elite_recommendation", "")
         chains = finding.get("chain_potential", [])
         
-        # Build report
         lines = [
             f"# {title}",
             "",
@@ -487,7 +448,6 @@ class SmartHuntOrchestrator:
         return "\n".join(lines)
 
     def _generate_h1_fields(self, finding: dict) -> str:
-        """Generate HackerOne form fields for copy-paste submission."""
         title = finding.get("title", "")[:150]
         severity = finding.get("severity", "medium").lower()
         cvss = finding.get("cvss", 0)
@@ -498,12 +458,10 @@ class SmartHuntOrchestrator:
         evidence = finding.get("evidence", {})
         category = finding.get("category", "")
         
-        # Map category to CWE
         from vapt.reporting.bounty_report import VULN_REFERENCES
         refs = VULN_REFERENCES.get(category, {})
         weakness = refs.get("cwe", "CWE-284")
         
-        # CVSS 4.0 vector
         cvss_vector = self._calculate_cvss4_vector(finding)
         
         steps_text = ""
@@ -537,19 +495,16 @@ class SmartHuntOrchestrator:
         )
 
     def _calculate_cvss4_vector(self, finding: dict) -> str:
-        """Calculate a CVSS 4.0 vector string from finding attributes."""
         severity = finding.get("severity", "medium").lower()
         requires_auth = finding.get("requires_auth", False)
         category = finding.get("category", "").lower()
         
-        # Base metrics
-        av = "N"  # Network
-        ac = "L"  # Low complexity by default
-        at = "N"  # No attack requirements
+        av = "N"
+        ac = "L"
+        at = "N"
         pr = "L" if requires_auth else "N"
-        ui = "N"  # No user interaction by default
+        ui = "N"
         
-        # Impact metrics based on severity
         if severity == "critical":
             vc, vi, va = "H", "H", "H"
         elif severity == "high":
@@ -559,26 +514,22 @@ class SmartHuntOrchestrator:
         else:
             vc, vi, va = "N", "L", "N"
         
-        # Subsequent system impact
         sc = si = sa = "N"
         if "ssrf" in category or "rce" in category:
             sc, si, sa = "H", "H", "H"
         elif "idor" in category or "privilege" in category:
             sc = "H"
         
-        # Adjustments for specific vuln types
         if "xss" in category or "cors" in category:
-            ui = "P"  # Passive user interaction
+            ui = "P"
         if "race" in category:
-            ac = "H"  # High complexity
+            ac = "H"
         if "business" in category:
-            at = "P"  # Present attack requirements
+            at = "P"
         
         return f"CVSS:4.0/AV:{av}/AC:{ac}/AT:{at}/PR:{pr}/UI:{ui}/VC:{vc}/VI:{vi}/VA:{va}/SC:{sc}/SI:{si}/SA:{sa}"
 
     def _display_results(self, elapsed: float) -> None:
-        """Display the final results dashboard."""
-        # Phase summary table
         table = Table(title="Elite Hunt — Phase Results", border_style="cyan")
         table.add_column("Phase", style="bold")
         table.add_column("Result", style="cyan")
@@ -642,7 +593,6 @@ class SmartHuntOrchestrator:
         console.print()
         console.print(table)
         
-        # Findings summary
         if self.all_findings:
             console.print()
             findings_table = Table(title="Top Findings by Priority", border_style="yellow")
@@ -679,13 +629,11 @@ class SmartHuntOrchestrator:
             
             console.print(findings_table)
         
-        # Recommendations
         if "elite_analysis" in pr:
             console.print()
             for rec in pr["elite_analysis"].get("recommendations", []):
                 console.print(Panel(rec, border_style="yellow", title="[bold]Recommendation[/bold]"))
         
-        # Summary
         ready = sum(1 for f in self.all_findings if f.get("submission_readiness") == "ready")
         console.print(Panel(
             f"[bold]Findings:[/bold] {len(self.all_findings)} total, {ready} ready to submit\n"

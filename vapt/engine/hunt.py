@@ -1,15 +1,3 @@
-"""Autonomous hunt orchestrator — `vapt hunt-auto` pipeline.
-
-Reads a program scope YAML, runs the full 5-phase pipeline, and
-generates submission-ready reports — all without interactive prompts.
-
-Pipeline:
-  Phase 1  UNDERSTAND  — parse scope, plan strategy
-  Phase 2  DISCOVER    — recon, JS mining, endpoint extraction
-  Phase 3  TEST        — run scanners on discovered surface
-  Phase 4  VALIDATE    — false-positive filtering, escalation, dedup
-  Phase 5  REPORT      — PoC generation, screenshots, bounty reports
-"""
 
 from __future__ import annotations
 
@@ -42,13 +30,6 @@ console = Console()
 
 
 class HuntOrchestrator:
-    """Non-interactive autonomous hunt pipeline.
-
-    Usage::
-
-        orch = HuntOrchestrator("scopes/doordash.yaml", output_dir="./hunt-output")
-        results = orch.run()
-    """
 
     def __init__(
         self,
@@ -67,10 +48,8 @@ class HuntOrchestrator:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load program config
         self.program: ProgramConfig = load_program_scope(scope_file)
 
-        # Rate controller
         self.rate = RateController(
             profile=rate_profile,
             proxies=proxies,
@@ -78,30 +57,24 @@ class HuntOrchestrator:
             required_headers=self.program.testing.required_headers,
         )
 
-        # Decision engine
         self.has_auth = bool(auth_cookies_a or auth_bearer_a)
         self.decision = DecisionEngine(
             has_auth=self.has_auth,
             excluded_categories=set(self.program.excluded_categories),
         )
 
-        # Duplicate detector
         self.dedup = DuplicateDetector(
             program_age_months=program_age_months,
             resolved_report_count=resolved_reports,
         )
 
-        # Proof generator
         self.proof = ProofGenerator(output_dir=str(self.output_dir / "proofs"))
 
-        # Validator
         self.validator = FalsePositiveValidator(timeout=15)
 
-        # Sessions
         self.session_a = self._build_session(auth_cookies_a, auth_bearer_a)
         self.session_b = self._build_session(auth_cookies_b, auth_bearer_b)
 
-        # Results
         self.all_findings: list[dict] = []
         self.phase_timings: dict[str, float] = {}
         self.discovered_endpoints: list[str] = []
@@ -122,10 +95,8 @@ class HuntOrchestrator:
                     s.cookies.set(k.strip(), v.strip())
         return s
 
-    # ── Phase 1: UNDERSTAND ──────────────────────────────────────────
 
     def _phase_1_understand(self) -> dict:
-        """Parse scope and build the hunt strategy."""
         p = self.program
         strategy = {
             "program": p.program_name,
@@ -152,10 +123,8 @@ class HuntOrchestrator:
 
         return strategy
 
-    # ── Phase 2: DISCOVER ────────────────────────────────────────────
 
     def _phase_2_discover(self, progress: Progress) -> dict:
-        """Run recon and endpoint discovery on all in-scope targets."""
         results: dict[str, Any] = {
             "subdomains": [],
             "endpoints": [],
@@ -170,7 +139,6 @@ class HuntOrchestrator:
 
             task = progress.add_task(f"[cyan]Recon: {target}...", total=None)
 
-            # Subdomain enumeration
             try:
                 from vapt.scanner.recon import ReconScanner
                 recon = ReconScanner()
@@ -189,7 +157,6 @@ class HuntOrchestrator:
             except Exception:
                 pass
 
-            # JS file mining
             try:
                 from vapt.scanner.deepjs import DeepJSRecon
                 js_recon = DeepJSRecon(timeout=15)
@@ -209,7 +176,6 @@ class HuntOrchestrator:
             except Exception:
                 pass
 
-            # JS secret scanning
             try:
                 from vapt.scanner.jsscan import JSSecretScanner
                 js_scanner = JSSecretScanner(session=self.session_a, timeout=15)
@@ -225,10 +191,8 @@ class HuntOrchestrator:
         self.discovered_subdomains = list(set(results["subdomains"]))
         return results
 
-    # ── Phase 3: TEST ────────────────────────────────────────────────
 
     def _phase_3_test(self, progress: Progress) -> dict:
-        """Run vulnerability scanners on discovered attack surface."""
         stats: dict[str, int] = {}
 
         for asset in self.program.in_scope_assets:
@@ -258,7 +222,6 @@ class HuntOrchestrator:
         return stats
 
     def _get_scanners_for_asset(self, asset) -> list[tuple[str, Any]]:
-        """Return list of (name, scan_function) pairs for an asset."""
         scanners = []
         modules = self.program.modules or ["web", "api", "ssl", "dom", "auth", "fuzz", "jsscan", "cve", "advanced"]
 
@@ -352,20 +315,16 @@ class HuntOrchestrator:
 
         return scanners
 
-    # ── Phase 4: VALIDATE ────────────────────────────────────────────
 
     def _phase_4_validate(self, progress: Progress) -> dict:
-        """Filter false positives, run decision engine, and deduplicate."""
         stats: dict[str, Any] = {}
 
         task = progress.add_task("[cyan]Validating findings...", total=None)
         initial_count = len(self.all_findings)
 
-        # Step 1: Scope filter
         self.all_findings = filter_findings_by_program(self.all_findings, self.program)
         stats["after_scope_filter"] = len(self.all_findings)
 
-        # Step 2: False positive validation
         try:
             validated = self.validator.validate_findings(self.all_findings, self.session_a)
             confirmed = []
@@ -386,13 +345,11 @@ class HuntOrchestrator:
 
         stats["after_validation"] = len(self.all_findings)
 
-        # Step 3: Decision engine — identify escalation opportunities
         decisions = self.decision.decide(self.all_findings)
         escalations = self.decision.get_escalation_tests(decisions)
         stats["escalation_opportunities"] = len(escalations)
         stats["decision_summary"] = self.decision.summarise(decisions)
 
-        # Tag findings with their action
         action_map: dict[str, str] = {}
         for d in decisions:
             fid = d.finding.get("id", d.finding.get("title", ""))
@@ -402,7 +359,6 @@ class HuntOrchestrator:
             fid = str(f.get("id", f.get("title", "")))
             f["_decision"] = action_map.get(fid, "report")
 
-        # Step 4: Duplicate detection
         worth, dupes = self.dedup.filter_likely_duplicates(self.all_findings, threshold=0.80)
         stats["likely_duplicates"] = len(dupes)
         stats["worth_submitting"] = len(worth)
@@ -413,10 +369,8 @@ class HuntOrchestrator:
 
         return stats
 
-    # ── Phase 5: REPORT ──────────────────────────────────────────────
 
     def _phase_5_report(self, progress: Progress) -> dict:
-        """Generate PoCs, screenshots, and bounty reports."""
         stats: dict[str, Any] = {"reports": 0, "proofs": 0}
 
         if not self.all_findings:
@@ -424,7 +378,6 @@ class HuntOrchestrator:
 
         task = progress.add_task("[cyan]Generating reports...", total=None)
 
-        # Generate proofs for top findings
         top_findings = sorted(
             self.all_findings,
             key=lambda f: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(
@@ -440,7 +393,6 @@ class HuntOrchestrator:
             except Exception:
                 pass
 
-        # Generate bounty reports
         try:
             from vapt.reporting.bounty_report import BountyReportGenerator
             gen = BountyReportGenerator(output_dir=str(self.output_dir))
@@ -461,14 +413,12 @@ class HuntOrchestrator:
         except Exception:
             pass
 
-        # Save raw JSON
         json_path = self.output_dir / "hunt_findings.json"
         json_path.write_text(
             json.dumps(self.all_findings, indent=2, default=str),
             encoding="utf-8",
         )
 
-        # Save summary
         summary = self._build_summary()
         summary_path = self.output_dir / "hunt_summary.json"
         summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
@@ -478,13 +428,10 @@ class HuntOrchestrator:
 
         return stats
 
-    # ── Main entry point ─────────────────────────────────────────────
 
     def run(self) -> dict[str, Any]:
-        """Execute the full autonomous hunt pipeline."""
         started = time.time()
 
-        # Banner
         console.print(Panel(
             f"[bold]VAPT CLI — Autonomous Hunt[/bold]\n\n"
             f"Program:  {self.program.program_name or 'N/A'}\n"
@@ -506,7 +453,6 @@ class HuntOrchestrator:
             console=console,
         ) as progress:
 
-            # Phase 1
             t1 = time.time()
             phase1_task = progress.add_task("[cyan]Phase 1: Understanding program...", total=None)
             strategy = self._phase_1_understand()
@@ -517,22 +463,18 @@ class HuntOrchestrator:
 
             self._show_strategy(strategy)
 
-            # Phase 2
             t2 = time.time()
             results["discovery"] = self._phase_2_discover(progress)
             self.phase_timings["discover"] = time.time() - t2
 
-            # Phase 3
             t3 = time.time()
             results["testing"] = self._phase_3_test(progress)
             self.phase_timings["test"] = time.time() - t3
 
-            # Phase 4
             t4 = time.time()
             results["validation"] = self._phase_4_validate(progress)
             self.phase_timings["validate"] = time.time() - t4
 
-            # Phase 5
             t5 = time.time()
             results["reporting"] = self._phase_5_report(progress)
             self.phase_timings["report"] = time.time() - t5
@@ -546,7 +488,6 @@ class HuntOrchestrator:
 
         return results
 
-    # ── Display helpers ──────────────────────────────────────────────
 
     def _show_strategy(self, strategy: dict) -> None:
         table = Table(title="[bold]Hunt Strategy[/bold]", show_header=True)
@@ -573,7 +514,6 @@ class HuntOrchestrator:
         console.print()
 
     def _show_results(self, results: dict, elapsed: float) -> None:
-        # Phase timings
         timing_table = Table(title="[bold]Phase Timings[/bold]", show_header=True)
         timing_table.add_column("Phase", style="cyan")
         timing_table.add_column("Duration", style="green")
@@ -582,7 +522,6 @@ class HuntOrchestrator:
         timing_table.add_row("[bold]Total[/bold]", f"[bold]{elapsed:.1f}s[/bold]")
         console.print(timing_table)
 
-        # Findings summary
         if self.all_findings:
             findings_table = Table(title="[bold]Confirmed Findings[/bold]", show_header=True)
             findings_table.add_column("#", style="dim")
@@ -610,7 +549,6 @@ class HuntOrchestrator:
 
             console.print(findings_table)
 
-        # Validation summary
         val = results.get("validation", {})
         if val:
             console.print(f"\n  Scope filtered:  {val.get('after_scope_filter', '?')}")
@@ -618,7 +556,6 @@ class HuntOrchestrator:
             console.print(f"  Likely dupes:    {val.get('likely_duplicates', '?')}")
             console.print(f"  Worth submitting: [bold green]{val.get('worth_submitting', '?')}[/bold green]")
 
-        # Final panel
         console.print(Panel(
             f"[bold green]Hunt complete![/bold green]\n\n"
             f"Program: {self.program.program_name}\n"

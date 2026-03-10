@@ -1,4 +1,3 @@
-"""Database exposure and injection scanner."""
 
 from __future__ import annotations
 
@@ -60,7 +59,6 @@ SENSITIVE_INDEX_PATTERNS = [
 
 
 class DatabaseScanner:
-    """Database-level vulnerability scanner."""
 
     def __init__(
         self,
@@ -74,21 +72,16 @@ class DatabaseScanner:
         self.findings: list[dict] = []
 
     def run(self, target: str, ports: str = "") -> dict[str, Any]:
-        """Run all database security checks against target."""
         host = self._extract_host(target)
 
-        # Port-based service detection
         port_list = self._parse_ports(ports)
         if not port_list:
-            # Default: check common DB ports
             port_list = list(DB_PORTS.keys())
 
-        # Check each port
         for port in port_list:
             if port in DB_PORTS:
                 self._check_db_port(host, port, DB_PORTS[port])
 
-        # Also check HTTP-based database UIs on web ports
         base = sanitize_target(target)
         if not base.startswith("http"):
             base = f"https://{base}"
@@ -101,7 +94,6 @@ class DatabaseScanner:
         return {"findings": self.findings}
 
     def _extract_host(self, target: str) -> str:
-        """Extract hostname/IP from target."""
         target = target.strip()
         if "://" in target:
             from urllib.parse import urlparse
@@ -111,7 +103,6 @@ class DatabaseScanner:
         return target
 
     def _parse_ports(self, ports: str) -> list[int]:
-        """Parse port specification."""
         if not ports:
             return []
         result = []
@@ -132,17 +123,14 @@ class DatabaseScanner:
 
 
     def _check_db_port(self, host: str, port: int, service: str) -> None:
-        """Check if a database port is open and accessible."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             result = sock.connect_ex((host, port))
             if result == 0:
-                # Port is open — try to get banner
                 banner = self._get_banner(sock, service)
                 sock.close()
 
-                # Service-specific checks
                 if service == "redis":
                     self._check_redis(host, port)
                 elif service == "mongodb":
@@ -176,9 +164,7 @@ class DatabaseScanner:
             pass
 
     def _get_banner(self, sock: socket.socket, service: str) -> str:
-        """Try to read service banner."""
         try:
-            # Some services need a probe
             if service in ("redis",):
                 sock.send(b"PING\r\n")
             elif service in ("memcached",):
@@ -194,18 +180,15 @@ class DatabaseScanner:
 
 
     def _check_redis(self, host: str, port: int) -> None:
-        """Check Redis for no-auth access."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((host, port))
 
-            # Try INFO command (requires no auth if accessible)
             sock.send(b"INFO server\r\n")
             resp = sock.recv(4096).decode("utf-8", errors="replace")
 
             if "redis_version" in resp:
-                # No auth! Redis is wide open
                 version = ""
                 for line in resp.split("\n"):
                     if line.startswith("redis_version:"):
@@ -222,7 +205,6 @@ class DatabaseScanner:
                     remediation="Set requirepass in redis.conf. Bind to 127.0.0.1. Use TLS.",
                 ))
 
-                # Check for RCE capability
                 sock.send(b"CONFIG GET dir\r\n")
                 config_resp = sock.recv(1024).decode("utf-8", errors="replace")
                 if "dir" in config_resp.lower() or "$" in config_resp:
@@ -252,28 +234,25 @@ class DatabaseScanner:
 
 
     def _check_mongodb(self, host: str, port: int) -> None:
-        """Check MongoDB for no-auth access."""
         try:
-            # MongoDB wire protocol: try to run serverStatus
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((host, port))
 
-            # Send isMaster command (minimal wire protocol)
             sock.send(
-                b"\x3a\x00\x00\x00"  # message length
-                b"\x01\x00\x00\x00"  # request id
-                b"\x00\x00\x00\x00"  # response to
-                b"\xd4\x07\x00\x00"  # opcode (OP_QUERY)
-                b"\x00\x00\x00\x00"  # flags
-                b"admin.$cmd\x00"    # collection
-                b"\x00\x00\x00\x00"  # skip
-                b"\x01\x00\x00\x00"  # return
-                b"\x10\x00\x00\x00"  # doc length
-                b"\x10"              # int32 type
-                b"isMaster\x00"      # key
-                b"\x01\x00\x00\x00"  # value
-                b"\x00"              # doc end
+                b"\x3a\x00\x00\x00"
+                b"\x01\x00\x00\x00"
+                b"\x00\x00\x00\x00"
+                b"\xd4\x07\x00\x00"
+                b"\x00\x00\x00\x00"
+                b"admin.$cmd\x00"
+                b"\x00\x00\x00\x00"
+                b"\x01\x00\x00\x00"
+                b"\x10\x00\x00\x00"
+                b"\x10"
+                b"isMaster\x00"
+                b"\x01\x00\x00\x00"
+                b"\x00"
             )
 
             resp = sock.recv(4096)
@@ -296,7 +275,6 @@ class DatabaseScanner:
 
 
     def _check_memcached(self, host: str, port: int) -> None:
-        """Check Memcached for open access."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
@@ -328,7 +306,6 @@ class DatabaseScanner:
 
 
     def _check_elasticsearch_direct(self, host: str, port: int) -> None:
-        """Check Elasticsearch via HTTP."""
         try:
             resp = self.session.get(
                 f"http://{host}:{port}/",
@@ -349,7 +326,6 @@ class DatabaseScanner:
                     remediation="Enable X-Pack security. Set up RBAC. Bind to internal network.",
                 ))
 
-                # Check indices
                 try:
                     idx_resp = self.session.get(
                         f"http://{host}:{port}/_cat/indices?format=json",
@@ -382,7 +358,6 @@ class DatabaseScanner:
 
 
     def _check_elasticsearch_http(self, base: str, host: str) -> None:
-        """Check for Elasticsearch on standard web ports."""
         for port_suffix in ["", ":9200", ":9201"]:
             url = f"http://{host}{port_suffix}/"
             try:
@@ -394,13 +369,11 @@ class DatabaseScanner:
                 continue
 
     def _check_couchdb_http(self, base: str, host: str) -> None:
-        """Check for CouchDB on HTTP."""
         for port in [5984, 6984]:
             url = f"http://{host}:{port}/"
             try:
                 resp = self.session.get(url, timeout=self.timeout, verify=False)
                 if resp.status_code == 200 and "couchdb" in resp.text.lower():
-                    # Try listing databases
                     dbs_resp = self.session.get(
                         f"http://{host}:{port}/_all_dbs",
                         timeout=self.timeout, verify=False,
@@ -419,7 +392,6 @@ class DatabaseScanner:
                 continue
 
     def _check_kibana_http(self, base: str, host: str) -> None:
-        """Check for Kibana dashboard."""
         for port in [5601]:
             url = f"http://{host}:{port}/"
             try:
@@ -438,7 +410,6 @@ class DatabaseScanner:
                 continue
 
     def _check_neo4j_http(self, base: str, host: str) -> None:
-        """Check for Neo4j browser."""
         for port in [7474, 7473]:
             url = f"http://{host}:{port}/"
             try:
@@ -457,12 +428,10 @@ class DatabaseScanner:
                 continue
 
     def _check_rabbitmq_http(self, base: str, host: str) -> None:
-        """Check for RabbitMQ management UI."""
         url = f"http://{host}:15672/"
         try:
             resp = self.session.get(url, timeout=self.timeout, verify=False)
             if resp.status_code == 200 and ("rabbitmq" in resp.text.lower() or "management" in resp.text.lower()):
-                # Try default creds
                 auth_resp = self.session.get(
                     f"http://{host}:15672/api/overview",
                     timeout=self.timeout, verify=False,
@@ -501,7 +470,6 @@ class DatabaseScanner:
         category: str = "database",
         remediation: str = "",
     ) -> dict:
-        """Build a standardized finding dict."""
         cvss_map = {
             "critical": 9.5, "high": 7.5, "medium": 5.3, "low": 3.1, "info": 0.0,
         }

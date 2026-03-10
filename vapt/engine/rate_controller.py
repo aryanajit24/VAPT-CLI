@@ -1,4 +1,3 @@
-"""Adaptive rate controller with WAF-aware throttling and proxy rotation."""
 
 from __future__ import annotations
 
@@ -14,14 +13,13 @@ import requests
 
 @dataclass
 class RateProfile:
-    """Describes the throttling behaviour for a rate tier."""
     name: str
-    base_delay: float          # seconds between requests
-    jitter: float              # random ± seconds added
-    burst_size: int            # requests allowed before mandatory pause
-    burst_pause: float         # seconds to pause after a burst
-    backoff_multiplier: float  # multiply delay on WAF/429 detection
-    max_delay: float           # ceiling for exponential backoff
+    base_delay: float
+    jitter: float
+    burst_size: int
+    burst_pause: float
+    backoff_multiplier: float
+    max_delay: float
 
 
 PROFILES: dict[str, RateProfile] = {
@@ -47,15 +45,6 @@ _USER_AGENTS = [
 
 
 class RateController:
-    """Adaptive request rate controller.
-
-    Features:
-      - Per-domain independent rate limiting
-      - WAF / 429 detection with exponential backoff
-      - Optional proxy rotation
-      - User-Agent rotation in stealth mode
-      - Thread-safe for parallel scanning
-    """
 
     def __init__(
         self,
@@ -72,14 +61,12 @@ class RateController:
         self._rotate_ua = rotate_ua
         self._required_headers = required_headers or {}
 
-        # Per-domain state
         self._domain_locks: dict[str, threading.Lock] = {}
         self._domain_counters: dict[str, int] = {}
         self._domain_delays: dict[str, float] = {}
         self._domain_last: dict[str, float] = {}
         self._global_lock = threading.Lock()
 
-        # Stats
         self.total_requests = 0
         self.total_blocked = 0
         self.total_backoffs = 0
@@ -142,10 +129,6 @@ class RateController:
         max_retries: int = 3,
         **kwargs: Any,
     ) -> requests.Response | None:
-        """Send an HTTP request with rate limiting, WAF detection, and retry.
-
-        Returns the Response object or None if all retries fail.
-        """
         domain = self._domain_of(url)
         lock = self._get_lock(domain)
 
@@ -153,7 +136,6 @@ class RateController:
 
         for attempt in range(max_retries):
             with lock:
-                # Enforce delay
                 now = time.monotonic()
                 delay = self._domain_delays.get(domain, self._profile.base_delay)
                 jitter = random.uniform(-self._profile.jitter, self._profile.jitter)
@@ -161,7 +143,6 @@ class RateController:
                 if wait > 0:
                     time.sleep(wait)
 
-                # Burst control
                 self._domain_counters[domain] = self._domain_counters.get(domain, 0) + 1
                 if self._domain_counters[domain] >= self._profile.burst_size:
                     time.sleep(self._profile.burst_pause)
@@ -169,7 +150,6 @@ class RateController:
 
                 self._domain_last[domain] = time.monotonic()
 
-            # Send request
             sess = session or requests.Session()
             proxy = self._next_proxy()
             req_kwargs: dict[str, Any] = {

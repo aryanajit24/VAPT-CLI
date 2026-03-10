@@ -1,4 +1,3 @@
-"""Tests for VAPT CLI knowledge base, risk scorer, correlator, and compliance engine."""
 
 from __future__ import annotations
 
@@ -10,11 +9,8 @@ from vapt.engine.correlator import Correlator
 from vapt.engine.compliance import ComplianceEngine
 
 
-# ─── Fixtures ─────────────────────────────────────────────────────────────────
-
 @pytest.fixture
 def tmp_db(tmp_path):
-    """Return a temporary SQLite database path and seed it."""
     db_path = str(tmp_path / "test_vapt.db")
     from vapt.database.seed_kb import seed
     seed(db_path)
@@ -58,8 +54,6 @@ SAMPLE_FINDINGS = [
     },
 ]
 
-
-# ─── KnowledgeBase ────────────────────────────────────────────────────────────
 
 class TestKnowledgeBase:
     def test_get_all_returns_entries(self, kb):
@@ -106,11 +100,8 @@ class TestKnowledgeBase:
     def test_match_findings_unknown_category(self, kb):
         findings = [{"category": "unknown_xyz"}]
         enriched = kb.match_findings(findings)
-        # Should not raise, should return the finding as-is
         assert enriched[0]["category"] == "unknown_xyz"
 
-
-# ─── RiskScorer ───────────────────────────────────────────────────────────────
 
 class TestRiskScorer:
     def setup_method(self):
@@ -140,7 +131,6 @@ class TestRiskScorer:
     def test_score_scan_empty_findings(self):
         result = self.scorer.score_scan([])
         assert result["overall_score"] == 0.0
-        # Spec: 0-19 = minimal
         assert result["risk_level"] == "minimal"
 
     def test_severity_counts_correct(self):
@@ -151,19 +141,15 @@ class TestRiskScorer:
         assert counts.get("medium", 0) == 1
 
     def test_risk_level_critical_for_high_score(self):
-        # Spec formula: raw = count × weight.  8 criticals → 8×10 = 80 → critical band.
         findings = [{"severity": "critical", "cvss_score": 10.0} for _ in range(8)]
         result = self.scorer.score_scan(findings)
         assert result["risk_level"] in ("critical", "high")
 
     def test_risk_level_low_for_low_score(self):
-        # 1 info finding → raw = 0.2 → spec band 0-19 = minimal
         findings = [{"severity": "info"}]
         result = self.scorer.score_scan(findings)
         assert result["risk_level"] in ("low", "minimal")
 
-
-# ─── Correlator ───────────────────────────────────────────────────────────────
 
 class TestCorrelator:
     def setup_method(self):
@@ -208,8 +194,6 @@ class TestCorrelator:
         assert result["attack_chains"] == []
         assert result["grouped_by_category"] == {}
 
-
-# ─── ComplianceEngine ─────────────────────────────────────────────────────────
 
 class TestComplianceEngine:
     def test_map_findings_returns_frameworks(self, compliance_engine):

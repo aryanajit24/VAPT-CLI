@@ -1,10 +1,3 @@
-"""Decision engine — decides what to test next based on findings so far.
-
-Takes the output of each scanning phase and routes findings into
-escalation paths.  For example a CORS reflection gets routed into a
-data-exfiltration proof-of-concept, or an open redirect gets chained
-with an OAuth flow for token theft.
-"""
 
 from __future__ import annotations
 
@@ -14,7 +7,6 @@ from typing import Any
 
 @dataclass
 class EscalationPath:
-    """A single escalation route from a finding to a higher-impact exploit."""
     name: str
     source_category: str
     target_test: str
@@ -134,7 +126,6 @@ ESCALATION_PATHS: list[EscalationPath] = [
     ),
 ]
 
-# Category aliases so findings with varied category names still match
 _CATEGORY_ALIASES: dict[str, str] = {
     "cors_misconfiguration": "cors",
     "cors": "cors",
@@ -173,24 +164,14 @@ _CATEGORY_ALIASES: dict[str, str] = {
 
 @dataclass
 class Decision:
-    """A decision produced by the engine."""
-    action: str               # "escalate" | "report" | "skip" | "needs_auth"
+    action: str
     finding: dict
     escalation: EscalationPath | None = None
     reason: str = ""
-    priority: int = 0         # higher = do first
+    priority: int = 0
 
 
 class DecisionEngine:
-    """Analyses findings and produces a prioritised action list.
-
-    For each finding the engine:
-      1. Normalises the category
-      2. Checks if an escalation path exists
-      3. Checks if the escalation requires auth we don't have
-      4. Scores priority based on potential severity & bounty
-      5. Returns a sorted list of Decisions
-    """
 
     def __init__(self, has_auth: bool = False, excluded_categories: set[str] | None = None) -> None:
         self.has_auth = has_auth
@@ -245,7 +226,6 @@ class DecisionEngine:
         return decisions
 
     def get_escalation_tests(self, decisions: list[Decision]) -> list[dict]:
-        """Return a list of tests to execute for escalation decisions."""
         tests: list[dict] = []
         seen: set[str] = set()
 

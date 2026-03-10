@@ -1,4 +1,3 @@
-"""False positive validation engine with multi-strategy verification."""
 
 from __future__ import annotations
 
@@ -14,7 +13,7 @@ CONFIDENCE_HIGH = 0.90
 CONFIDENCE_MEDIUM = 0.70
 CONFIDENCE_LOW = 0.40
 
-TIMING_THRESHOLD = 3.0   # Seconds above baseline to count as delay
+TIMING_THRESHOLD = 3.0
 TIMING_RETRIES = 3
 
 AUTO_CONFIRM_HIGH: set[str] = {
@@ -24,8 +23,6 @@ AUTO_CONFIRM_HIGH: set[str] = {
     "missing_header", "server_info", "technology_disclosure",
 }
 
-# NOTE: These should only be categories where the EVIDENCE ITSELF is proof.
-# Do NOT include categories that need re-verification (like fuzzer findings).
 PATTERN_CONFIRM: set[str] = {
     "dom_xss", "prototype_pollution", "exposed_key",
     "postmessage", "unsafe_eval", "localstorage_sensitive",
@@ -54,7 +51,6 @@ CATEGORY_ALIASES: dict[str, str] = {
     "xxe": "xxe", "xml_external_entity": "xxe",
     "oauth": "oauth", "oauth_misconfiguration": "oauth",
     "dom_xss": "dom_xss", "dom_based_xss": "dom_xss",
-    # Fuzzer categories — route to content-based validation
     "exposed_file": "exposed_file",
     "exposed_secret": "exposed_secret",
     "exposed_admin_panel": "exposed_admin_panel",
@@ -66,7 +62,6 @@ CATEGORY_ALIASES: dict[str, str] = {
 
 @dataclass
 class ValidationResult:
-    """Result of a validation attempt."""
     vuln_id: str
     original_severity: str
     confirmed: bool
@@ -78,13 +73,6 @@ class ValidationResult:
 
 
 class FalsePositiveValidator:
-    """
-    Re-validates findings to filter out false positives and ensure HIGH confidence.
-
-    Every category gets a specialised validation strategy. Findings that cannot
-    be independently confirmed are either dropped or downgraded. All surviving
-    findings receive confidence >= 0.85 (HIGH).
-    """
 
     def __init__(
         self,
@@ -100,18 +88,13 @@ class FalsePositiveValidator:
         self,
         findings: list[dict],
     ) -> tuple[list[dict], list[ValidationResult]]:
-        """
-        Validate a list of findings.
-
-        Returns (confirmed_findings, validation_details).
-        """
         confirmed: list[dict] = []
         validations: list[ValidationResult] = []
 
         for finding in findings:
-            _vuln_id = finding.get("vuln_id", "")  # noqa: F841
+            _vuln_id = finding.get("vuln_id", "")
             raw_cat = finding.get("category", "").lower().strip()
-            _severity = finding.get("severity", "Medium")  # noqa: F841
+            _severity = finding.get("severity", "Medium")
 
             canonical = CATEGORY_ALIASES.get(raw_cat, raw_cat)
 
@@ -134,7 +117,6 @@ class FalsePositiveValidator:
         return confirmed, validations
 
     def _dispatch(self, canonical: str, raw_cat: str, finding: dict) -> ValidationResult:
-        """Route finding to the correct validator."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Medium")
 
@@ -166,7 +148,6 @@ class FalsePositiveValidator:
             "xxe": self._validate_xxe,
             "dom_xss": self._validate_dom_xss,
             "oauth": self._validate_oauth,
-            # Fuzzer findings need content verification, not just status codes
             "exposed_file": self._validate_exposed_resource,
             "exposed_secret": self._validate_exposed_resource,
             "exposed_admin_panel": self._validate_exposed_resource,
@@ -178,7 +159,6 @@ class FalsePositiveValidator:
 
 
     def _validate_pattern_evidence(self, finding: dict) -> ValidationResult:
-        """Confirm findings where evidence itself is proof (secrets, configs, etc.)."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Medium")
         evidence = finding.get("evidence", "")
@@ -203,7 +183,6 @@ class FalsePositiveValidator:
 
 
     def _validate_sqli(self, finding: dict) -> ValidationResult:
-        """Re-confirm SQL injection by checking for consistent error / timing."""
         url = finding.get("url", "")
         param = finding.get("parameter", "")
         payload = finding.get("payload", "")
@@ -252,7 +231,6 @@ class FalsePositiveValidator:
                                     "Could not reproduce SQL injection on re-test.")
 
     def _validate_xss(self, finding: dict) -> ValidationResult:
-        """Re-confirm XSS by injecting a unique canary and checking reflection."""
         url = finding.get("url", "")
         param = finding.get("parameter", "")
         vuln_id = finding.get("vuln_id", "")
@@ -293,7 +271,6 @@ class FalsePositiveValidator:
                                     "Canary not reflected on re-test.")
 
     def _validate_ssti(self, finding: dict) -> ValidationResult:
-        """Re-confirm SSTI by sending a unique math expression."""
         url = finding.get("url", "")
         param = finding.get("parameter", "")
         vuln_id = finding.get("vuln_id", "")
@@ -328,7 +305,6 @@ class FalsePositiveValidator:
                                     "Could not reproduce SSTI on re-test.")
 
     def _validate_cmdi(self, finding: dict) -> ValidationResult:
-        """Re-confirm command injection with a unique echo test."""
         url = finding.get("url", "")
         param = finding.get("parameter", "")
         vuln_id = finding.get("vuln_id", "")
@@ -362,7 +338,6 @@ class FalsePositiveValidator:
                                     "Could not reproduce command injection.")
 
     def _validate_traversal(self, finding: dict) -> ValidationResult:
-        """Re-confirm path traversal by checking for known file content."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
@@ -388,7 +363,6 @@ class FalsePositiveValidator:
                                "Evidence pattern check only.")
 
     def _validate_redirect(self, finding: dict) -> ValidationResult:
-        """Re-confirm open redirect by checking Location header."""
         url = finding.get("url", "")
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Medium")
@@ -418,7 +392,6 @@ class FalsePositiveValidator:
                                     "Could not confirm redirect.")
 
     def _validate_csrf(self, finding: dict) -> ValidationResult:
-        """Re-confirm CSRF by verifying no anti-CSRF token in form."""
         url = finding.get("url", "")
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Medium")
@@ -454,7 +427,6 @@ class FalsePositiveValidator:
                                "CSRF confirmed by original evidence.")
 
     def _validate_cors(self, finding: dict) -> ValidationResult:
-        """Re-confirm CORS misconfiguration by replaying evil origin."""
         url = finding.get("url", "")
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
@@ -497,7 +469,6 @@ class FalsePositiveValidator:
                                "CORS confirmed from original evidence.")
 
     def _validate_idor(self, finding: dict) -> ValidationResult:
-        """Re-confirm IDOR by testing adjacent IDs."""
         url = finding.get("url", "")
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
@@ -525,12 +496,10 @@ class FalsePositiveValidator:
                                "IDOR confirmed from original evidence and analysis.")
 
     def _validate_jwt(self, finding: dict) -> ValidationResult:
-        """Re-confirm JWT vulnerabilities."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
 
-        # JWT vulns are structural — if we detected them, they're real
         jwt_indicators = ["alg", "none", "HS256", "exp", "iat", "sub", "header", "payload"]
         matches = sum(1 for ind in jwt_indicators if ind.lower() in evidence.lower())
 
@@ -546,7 +515,6 @@ class FalsePositiveValidator:
                                "JWT vulnerability confirmed by token analysis.")
 
     def _validate_race(self, finding: dict) -> ValidationResult:
-        """Confirm race condition findings."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
@@ -566,7 +534,6 @@ class FalsePositiveValidator:
                                "Race condition confirmed by original analysis.")
 
     def _validate_smuggling(self, finding: dict) -> ValidationResult:
-        """Confirm HTTP request smuggling findings."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Critical")
         evidence = finding.get("evidence", "")
@@ -583,7 +550,6 @@ class FalsePositiveValidator:
                                "Smuggling confirmed by original analysis.")
 
     def _validate_ssrf(self, finding: dict) -> ValidationResult:
-        """Re-confirm SSRF by checking response content."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
@@ -606,7 +572,6 @@ class FalsePositiveValidator:
                                "SSRF confirmed from original evidence.")
 
     def _validate_xxe(self, finding: dict) -> ValidationResult:
-        """Re-confirm XXE by checking for entity expansion evidence."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Critical")
         evidence = finding.get("evidence", "")
@@ -625,7 +590,6 @@ class FalsePositiveValidator:
                                "XXE confirmed from original evidence.")
 
     def _validate_dom_xss(self, finding: dict) -> ValidationResult:
-        """Confirm DOM XSS by verifying sink/source patterns in JS."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
@@ -657,7 +621,6 @@ class FalsePositiveValidator:
                                "DOM XSS confirmed from JavaScript analysis.")
 
     def _validate_oauth(self, finding: dict) -> ValidationResult:
-        """Confirm OAuth misconfiguration findings."""
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "High")
         evidence = finding.get("evidence", "")
@@ -678,14 +641,6 @@ class FalsePositiveValidator:
                                "OAuth issue confirmed from configuration analysis.")
 
     def _validate_exposed_resource(self, finding: dict) -> ValidationResult:
-        """Re-verify exposed file/admin/debug findings by re-fetching the URL.
-
-        This is the critical false-positive filter for fuzzer findings.
-        We re-request the URL and verify:
-        1. Still returns 200 (not 403/401/404)
-        2. Content is NOT a CDN/WAF block page
-        3. Content matches expected patterns for the file type
-        """
         url = finding.get("url", "")
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Medium")
@@ -713,7 +668,6 @@ class FalsePositiveValidator:
         body = resp.text.lower() if resp.text else ""
         body_len = len(resp.content)
 
-        # Some WAFs return 200 with a block page
         block_patterns = [
             "access denied", "error from cloudfront",
             "checking your browser", "attention required",
@@ -740,7 +694,6 @@ class FalsePositiveValidator:
         )
 
     def _validate_timing(self, finding: dict) -> ValidationResult:
-        """Re-confirm time-based blind injection with multiple timing tests."""
         url = finding.get("url", "")
         param = finding.get("parameter", "")
         payload = finding.get("payload", "")
@@ -791,11 +744,6 @@ class FalsePositiveValidator:
                                     f"Time delay not consistent ({delays_observed}/{TIMING_RETRIES}).")
 
     def _validate_generic(self, finding: dict) -> ValidationResult:
-        """Generic validator — STRICTER: reject findings without real evidence.
-
-        Unlike before, this does NOT auto-confirm everything. If the evidence
-        is thin or looks like a blocked/error response, the finding is rejected.
-        """
         vuln_id = finding.get("vuln_id", "")
         severity = finding.get("severity", "Medium")
         evidence = finding.get("evidence", "")
@@ -834,7 +782,6 @@ class FalsePositiveValidator:
 
     def _confirmed(self, vuln_id: str, severity: str, confidence: float,
                    method: str, details: str) -> ValidationResult:
-        """Create a confirmed result — minimum confidence 0.85."""
         return ValidationResult(
             vuln_id=vuln_id, original_severity=severity,
             confirmed=True, confidence=max(confidence, 0.85),
@@ -844,7 +791,6 @@ class FalsePositiveValidator:
 
     def _not_confirmed(self, vuln_id: str, severity: str,
                        method: str, details: str) -> ValidationResult:
-        """Create a not-confirmed result."""
         return ValidationResult(
             vuln_id=vuln_id, original_severity=severity,
             confirmed=False, confidence=0.2,
@@ -853,7 +799,6 @@ class FalsePositiveValidator:
         )
 
     def _get_baseline(self, url: str) -> tuple[int, int, str]:
-        """Get or cache a baseline response for a URL."""
         base = url.split("?")[0]
         if base in self._baseline_cache:
             return self._baseline_cache[base]
@@ -870,7 +815,6 @@ class FalsePositiveValidator:
         baseline: tuple[int, int, str],
         current: tuple[int, int, str],
     ) -> bool:
-        """Check if two responses are significantly different."""
         b_status, b_len, b_body = baseline
         c_status, c_len, c_body = current
 

@@ -1,17 +1,14 @@
-"""Interactive security testing TUI built with Textual."""
 
 from __future__ import annotations
 
 import json
 import time
-import threading
 from typing import Optional
 
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import (
     Button,
     DataTable,
@@ -33,7 +30,6 @@ from vapt.utils.codec import Codec
 
 
 class ProxyTab(Container):
-    """Proxy traffic viewer with filtering."""
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="proxy-controls"):
@@ -58,7 +54,6 @@ class ProxyTab(Container):
 
 
 class RepeaterTab(Container):
-    """Manual request editor and sender."""
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="repeater-controls"):
@@ -84,7 +79,6 @@ class RepeaterTab(Container):
 
 
 class IntruderTab(Container):
-    """Fuzzing configuration and results."""
 
     def compose(self) -> ComposeResult:
         with Vertical(id="intruder-config"):
@@ -116,7 +110,6 @@ class IntruderTab(Container):
 
 
 class CodecTab(Container):
-    """Encoder/decoder utility."""
 
     def compose(self) -> ComposeResult:
         with Vertical(id="codec-layout"):
@@ -145,26 +138,19 @@ CSS = """
 Screen {
     background: $surface;
 }
-#proxy-controls, #repeater-controls {
     height: 3;
     dock: top;
     padding: 0 1;
 }
-#proxy-controls Button, #repeater-controls Button {
     margin: 0 1;
 }
-#proxy-controls Input, #repeater-controls Input {
     width: 1fr;
 }
-#proxy-table, #intruder-table {
     height: 1fr;
     max-height: 50%;
 }
-#proxy-detail, #repeater-panels {
     height: 1fr;
 }
-#proxy-req-panel, #proxy-resp-panel,
-#repeater-req-panel, #repeater-resp-panel {
     width: 1fr;
     padding: 0 1;
 }
@@ -173,36 +159,27 @@ Screen {
     color: $accent;
     padding: 0 1;
 }
-#intruder-config {
     height: auto;
     max-height: 6;
     padding: 0 1;
 }
-#intruder-config Horizontal {
     height: 3;
 }
-#intruder-config Input {
     width: 1fr;
 }
-#intruder-log {
     height: auto;
     max-height: 8;
     border-top: solid $accent;
 }
-#codec-layout {
     padding: 1;
 }
-#codec-input, #codec-output {
     height: 1fr;
 }
-#codec-buttons, #codec-buttons2 {
     height: 3;
     align: center middle;
 }
-#codec-buttons Button, #codec-buttons2 Button {
     margin: 0 1;
 }
-#repeater-status {
     dock: bottom;
     height: 1;
     padding: 0 1;
@@ -212,7 +189,6 @@ Screen {
 
 
 class VAPTApp(App):
-    """VAPT CLI Interactive Security Testing Console."""
 
     TITLE = "VAPT CLI — Security Testing Console"
     CSS = CSS
@@ -257,7 +233,6 @@ class VAPTApp(App):
     def action_tab_codec(self) -> None:
         self.query_one(TabbedContent).active = "codec"
 
-    # ── Proxy handlers ───────────────────────────────────────
 
     @on(Button.Pressed, "#proxy-start")
     def start_proxy(self) -> None:
@@ -353,7 +328,6 @@ class VAPTApp(App):
                     key=str(flow.id),
                 )
 
-    # ── Repeater handlers ────────────────────────────────────
 
     @on(Button.Pressed, "#repeater-send")
     @work(thread=True)
@@ -410,7 +384,6 @@ class VAPTApp(App):
     def _update_repeater_status(self, text: str) -> None:
         self.query_one("#repeater-status", Label).update(text)
 
-    # ── Intruder handlers ────────────────────────────────────
 
     @on(Button.Pressed, "#intruder-start")
     @work(thread=True)
@@ -493,7 +466,6 @@ class VAPTApp(App):
         self.query_one("#intruder-start", Button).disabled = running
         self.query_one("#intruder-stop", Button).disabled = not running
 
-    # ── Codec handlers ───────────────────────────────────────
 
     def _codec_op(self, operation: str) -> None:
         input_area = self.query_one("#codec-input", TextArea)
@@ -556,6 +528,5 @@ class VAPTApp(App):
 
 
 def launch_tui(proxy_port: int = 8080) -> None:
-    """Launch the interactive TUI."""
     app = VAPTApp(proxy_port=proxy_port)
     app.run()

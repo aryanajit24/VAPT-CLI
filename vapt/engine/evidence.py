@@ -1,4 +1,3 @@
-"""Evidence enrichment with CVSS scoring and PoC generation."""
 
 from __future__ import annotations
 
@@ -9,8 +8,6 @@ from urllib.parse import urlparse
 
 import requests
 
-
-# CWE + CVSS lookup databases
 
 CWE_MAP: dict[str, str] = {
     "sql_injection": "CWE-89",
@@ -122,10 +119,8 @@ CATEGORY_CVSS: dict[str, tuple[float, str]] = {
     "exposed_secret":      (7.5, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"),
 }
 
-# Raw request/response formatting
 
 def format_raw_request(prepared: requests.PreparedRequest) -> str:
-    """Convert a PreparedRequest to a raw HTTP request string."""
     method = prepared.method or "GET"
     url = prepared.url or ""
     parsed = urlparse(url)
@@ -159,7 +154,6 @@ def format_raw_request(prepared: requests.PreparedRequest) -> str:
 
 
 def format_raw_response(resp: requests.Response, max_body: int = 2000) -> str:
-    """Convert a Response to a raw HTTP response string."""
     lines = [f"HTTP/1.1 {resp.status_code} {resp.reason or ''}"]
 
     for key, val in resp.headers.items():
@@ -174,12 +168,8 @@ def format_raw_response(resp: requests.Response, max_body: int = 2000) -> str:
     return raw
 
 
-# Evidence-collecting HTTP session
-
-
 @dataclass
 class CapturedExchange:
-    """One HTTP request/response exchange."""
     method: str
     url: str
     request_raw: str
@@ -191,16 +181,6 @@ class CapturedExchange:
 
 
 class EvidenceCollector:
-    """Wraps a requests.Session to capture raw HTTP exchanges.
-
-    Usage::
-
-        collector = EvidenceCollector(session)
-        resp = collector.get("https://target.com/login", params={"user": "admin"})
-        # Later, attach to a finding:
-        finding["request"] = collector.last_request
-        finding["response"] = collector.last_response
-    """
 
     def __init__(self, session: requests.Session | None = None, timeout: int = 10):
         self.session = session or requests.Session()
@@ -213,15 +193,9 @@ class EvidenceCollector:
         self.last_headers: dict = {}
 
     def __getattr__(self, name: str):
-        """Forward unknown attribute access to the underlying session.
-
-        This allows code like ``collector.headers.update(...)`` or
-        ``collector.options(url)`` to work transparently.
-        """
         return getattr(self.session, name)
 
     def _capture(self, resp: requests.Response, elapsed: float) -> CapturedExchange:
-        """Record an exchange and update last_* properties."""
         req_raw = format_raw_request(resp.request)
         resp_raw = format_raw_response(resp)
         exchange = CapturedExchange(
@@ -293,8 +267,6 @@ class EvidenceCollector:
         self.last_request = ""
         self.last_response = ""
 
-
-# Steps-to-reproduce generator
 
 STEPS_TEMPLATES: dict[str, list[str]] = {
     "sql_injection": [
@@ -551,7 +523,6 @@ STEPS_TEMPLATES: dict[str, list[str]] = {
     ],
 }
 
-# Fallback for categories not in the templates
 DEFAULT_STEPS = [
     "Send an HTTP request to {url}",
     "Include the payload `{payload}` in the identified parameter '{parameter}'",
@@ -562,11 +533,9 @@ DEFAULT_STEPS = [
 
 
 def generate_steps(finding: dict) -> list[str]:
-    """Generate step-by-step reproduction instructions for a finding."""
     category = finding.get("category", "").lower()
     template = STEPS_TEMPLATES.get(category, DEFAULT_STEPS)
 
-    # Build substitution values — use descriptive fallbacks, never angle-bracket placeholders
     url = finding.get("url", "the target endpoint")
     parameter = finding.get("parameter") or finding.get("param") or "the vulnerable parameter"
     payload = finding.get("payload") or "the test payload (see PoC below)"
@@ -591,8 +560,6 @@ def generate_steps(finding: dict) -> list[str]:
         steps.append(f"{i}. {rendered}")
     return steps
 
-
-# Impact & description generators
 
 IMPACT_MAP: dict[str, str] = {
     "sql_injection": "An attacker can read, modify, or delete the entire database. This may lead to full data breach, authentication bypass, and potentially remote code execution via database functions.",
@@ -715,7 +682,6 @@ DESCRIPTION_MAP: dict[str, str] = {
 
 
 def generate_poc(finding: dict) -> str:
-    """Generate a professional PoC (curl + python) for a finding."""
     url = finding.get("url", "<target>")
     method = "GET"
     payload = finding.get("payload", "")
@@ -724,10 +690,7 @@ def generate_poc(finding: dict) -> str:
 
     parts = []
 
-    # Determine HTTP method based on category
-    # Categories that are inherently POST-based
     post_categories = {"csrf", "mass_assignment", "race_condition", "xxe", "request_smuggling"}
-    # Categories that are inherently GET-based (file/directory access, headers)
     get_categories = {"exposed_file", "directory_listing", "security_header",
                       "insecure_cookie", "s3_bucket", "subdomain_takeover",
                       "exposed_secret", "open_redirect"}
@@ -739,7 +702,6 @@ def generate_poc(finding: dict) -> str:
     elif category in ("sqli", "sql_injection", "xss", "reflected_xss",
                        "ssti", "command_injection", "cmdi", "path_traversal",
                        "ssrf", "blind_sqli"):
-        # Injection-type categories: use GET with query params by default
         method = "GET"
 
     parts.append("# PoC — cURL")
@@ -778,16 +740,7 @@ def generate_poc(finding: dict) -> str:
     return "\n".join(parts)
 
 
-# Finding enrichment — fill in all missing fields
-
 def enrich_finding(finding: dict) -> dict:
-    """Take a raw finding from any scanner and fill in ALL professional fields.
-
-    After this function, the finding dict is guaranteed to have:
-      title, severity, cvss_score, cvss_vector, cwe, category, url,
-      description, steps_to_reproduce, impact, poc, evidence, payload,
-      request, response, remediation, confidence, scanner, validated
-    """
     f = copy.deepcopy(finding)
     cat = f.get("category", "").lower()
     sev = f.get("severity", "info").lower()
@@ -836,5 +789,4 @@ def enrich_finding(finding: dict) -> dict:
 
 
 def enrich_all_findings(findings: list[dict]) -> list[dict]:
-    """Enrich a list of findings — ensures every finding is HackerOne-ready."""
     return [enrich_finding(f) for f in findings]

@@ -1,4 +1,3 @@
-"""Cloud service misconfiguration scanner."""
 
 from __future__ import annotations
 
@@ -11,8 +10,6 @@ from rich.console import Console
 
 console = Console()
 
-
-# Cloud fingerprints for subdomain takeover
 
 TAKEOVER_FINGERPRINTS: list[dict[str, Any]] = [
     {"service": "AWS S3",
@@ -49,7 +46,6 @@ TAKEOVER_FINGERPRINTS: list[dict[str, Any]] = [
 
 
 class CloudScanner:
-    """Scan for cloud infrastructure misconfigurations and exposures."""
 
     def __init__(
         self,
@@ -65,12 +61,10 @@ class CloudScanner:
         )
         self.timeout = timeout
         self.findings: list[dict] = []
-        # Extract domain for bucket guessing
         self.domain = re.sub(r"https?://", "", self.target).split("/")[0]
         self.domain_base = self.domain.split(".")[0]
 
     def run(self) -> list[dict]:
-        """Run all cloud checks."""
         checks = [
             ("S3 Bucket Exposure", self._check_s3_buckets),
             ("Azure Blob Storage", self._check_azure_blobs),
@@ -92,7 +86,6 @@ class CloudScanner:
 
 
     def _check_s3_buckets(self) -> None:
-        """Check for exposed S3 buckets related to the target domain."""
         bucket_guesses = [
             self.domain_base,
             f"{self.domain_base}-backup",
@@ -131,7 +124,6 @@ class CloudScanner:
                         "remediation": "Disable public listing via S3 bucket policy. Enable 'Block Public Access' settings.",
                     })
                 elif resp.status_code == 403:
-                    # Bucket exists but access denied — test for ACL misconfiguration
                     acl_url = f"{url}?acl"
                     try:
                         acl_resp = self.session.get(acl_url, timeout=self.timeout)
@@ -153,7 +145,6 @@ class CloudScanner:
 
 
     def _check_azure_blobs(self) -> None:
-        """Check for exposed Azure Blob Storage containers."""
         containers = [
             self.domain_base,
             f"{self.domain_base}backup",
@@ -182,7 +173,6 @@ class CloudScanner:
 
 
     def _check_gcp_buckets(self) -> None:
-        """Check for exposed GCP storage buckets."""
         bucket_names = [
             self.domain_base,
             f"{self.domain_base}-backup",
@@ -210,7 +200,6 @@ class CloudScanner:
 
 
     def _check_firebase(self) -> None:
-        """Check for exposed Firebase / Firestore databases."""
         firebase_names = [
             self.domain_base,
             f"{self.domain_base}-app",
@@ -238,14 +227,11 @@ class CloudScanner:
 
 
     def _check_metadata_endpoints(self) -> None:
-        """Check if the target application exposes cloud metadata via SSRF."""
         from vapt.engine.payloads import SSRF_URLS, SSRF_PARAMS, SSRF_INDICATORS
 
-        # Target URL with potential SSRF parameters
         base = self.target
 
-        # Quick check: try known metadata URLs directly through the target
-        for param in SSRF_PARAMS[:8]:  # Top 8 most common
+        for param in SSRF_PARAMS[:8]:
             for meta_url in [
                 "http://169.254.169.254/latest/meta-data/",
                 "http://metadata.google.internal/computeMetadata/v1/",
@@ -270,7 +256,6 @@ class CloudScanner:
 
 
     def _check_subdomain_takeover(self) -> None:
-        """Check if the target domain is vulnerable to subdomain takeover."""
         try:
             import dns.resolver
         except ImportError:
@@ -301,7 +286,6 @@ class CloudScanner:
                     cname = str(rdata.target).rstrip(".")
                     for fp in TAKEOVER_FINGERPRINTS:
                         if any(cname.endswith(suffix) for suffix in fp["cname"]):
-                            # CNAME points to a takeover-vulnerable service — check response
                             try:
                                 resp = self.session.get(
                                     f"http://{subdomain}",
@@ -319,7 +303,6 @@ class CloudScanner:
                                         "remediation": f"Remove dangling CNAME or reclaim the {fp['service']} resource.",
                                     })
                             except requests.RequestException:
-                                # Connection error could also indicate unclaimed resource
                                 self.findings.append({
                                     "vuln_id": "CLOUD-007",
                                     "title": f"Possible Subdomain Takeover: {subdomain} → {fp['service']}",
@@ -335,7 +318,6 @@ class CloudScanner:
 
 
     def _check_do_spaces(self) -> None:
-        """Check for exposed DigitalOcean Spaces."""
         regions = ["nyc3", "sfo3", "ams3", "sgp1", "fra1"]
         names = [self.domain_base, f"{self.domain_base}-assets"]
 
@@ -360,25 +342,17 @@ class CloudScanner:
 
 
     def _check_cloud_panels(self) -> None:
-        """Check for exposed cloud management panels / endpoints."""
         endpoints = [
-            # Kubernetes
             ("/api/v1", "Kubernetes", re.compile(r'"kind":\s*"APIResourceList"', re.I)),
             ("/api/v1/namespaces", "Kubernetes", re.compile(r'"kind":\s*"NamespaceList"', re.I)),
             ("/healthz", "Kubernetes", re.compile(r"^ok$")),
-            # Docker
             ("/v2/_catalog", "Docker Registry", re.compile(r'"repositories"', re.I)),
             ("/version", "Docker", re.compile(r'"ApiVersion"', re.I)),
-            # Consul
             ("/v1/catalog/services", "Consul", re.compile(r'consul', re.I)),
-            # etcd
             ("/v2/keys", "etcd", re.compile(r'"action"|"node"', re.I)),
-            # Grafana
             ("/api/org", "Grafana", re.compile(r'"id".*"name"', re.I)),
             ("/api/dashboards/home", "Grafana", re.compile(r'"dashboard"', re.I)),
-            # Prometheus
             ("/api/v1/targets", "Prometheus", re.compile(r'"activeTargets"', re.I)),
-            # Jenkins
             ("/api/json", "Jenkins", re.compile(r'"_class".*"hudson', re.I)),
         ]
 

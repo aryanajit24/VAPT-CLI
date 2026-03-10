@@ -1,4 +1,3 @@
-"""Advanced injection scanner for NoSQL, LDAP, SSTI, and CRLF."""
 
 from __future__ import annotations
 
@@ -18,7 +17,6 @@ from vapt.engine.evidence import (
 
 
 class AdvancedScanner:
-    """Professional-grade scanner for advanced injection & logic vulns."""
 
     def __init__(
         self,
@@ -34,11 +32,9 @@ class AdvancedScanner:
         self.findings: list[dict] = []
 
     def run(self, target: str) -> dict[str, Any]:
-        """Run all advanced attack modules against a target."""
         self.findings = []
         base = target if target.startswith("http") else f"https://{target}"
 
-        # Discover pages/endpoints
         urls, forms, params = self._discover(base)
 
         self._test_nosql(base, urls, forms, params)
@@ -63,7 +59,6 @@ class AdvancedScanner:
 
 
     def _discover(self, base: str) -> tuple[list[str], list[dict], list[str]]:
-        """Quick crawl to find URLs, forms, and parameters."""
         urls = [base]
         forms: list[dict] = []
         params: list[str] = []
@@ -77,7 +72,6 @@ class AdvancedScanner:
                 full = urljoin(base, href)
                 if urlparse(full).netloc == urlparse(base).netloc:
                     urls.append(full)
-                    # Extract query params
                     q = urlparse(full).query
                     if q:
                         for pair in q.split("&"):
@@ -101,18 +95,14 @@ class AdvancedScanner:
 
 
     NOSQL_PAYLOADS = [
-        # MongoDB operator injection
         '{"$gt": ""}',
         '{"$ne": null}',
         '{"$regex": ".*"}',
         '{"$exists": true}',
-        # Tautology
         "' || '1'=='1",
         "'; return true; var x='",
-        # JSON injection for login bypass
         '{"$gt": ""}',
         '{"$nin": []}',
-        # MongoDB JavaScript injection
         "'; sleep(5000); var x='",
         "1; sleep(5000)",
     ]
@@ -125,14 +115,12 @@ class AdvancedScanner:
     ]
 
     def _test_nosql(self, base: str, urls: list[str], forms: list[dict], params: list[str]) -> None:
-        """Test for NoSQL injection in forms and URL parameters."""
         test_params = params[:10] if params else ["username", "password", "email", "id", "search", "query"]
 
         for url in urls[:5]:
             for param in test_params[:5]:
                 for payload in self.NOSQL_PAYLOADS[:5]:
                     try:
-                        # GET test
                         resp = self.http.get(url, params={param: payload})
                         if self._check_nosql_response(resp, payload):
                             self._add_finding(
@@ -150,7 +138,6 @@ class AdvancedScanner:
                     except Exception:
                         continue
 
-        # Test forms with JSON body (common for NoSQL)
         for form in forms[:5]:
             if form["method"] == "POST" and form["inputs"]:
                 json_payload = {}
@@ -178,14 +165,12 @@ class AdvancedScanner:
                     continue
 
     def _check_nosql_response(self, resp: requests.Response, payload: str) -> bool:
-        """Check if response indicates NoSQL injection."""
         text = resp.text.lower()
         for pattern in self.NOSQL_ERROR_PATTERNS:
             if pattern.lower() in text:
                 return True
-        # Check for timing-based (sleep payloads)
         if "sleep" in payload.lower():
-            return False  # handled separately
+            return False
         return False
 
 
@@ -206,12 +191,10 @@ class AdvancedScanner:
     ]
 
     def _test_ldap(self, base: str, urls: list[str], params: list[str]) -> None:
-        """Test for LDAP injection."""
         test_params = params[:5] if params else ["username", "user", "uid", "cn", "search"]
 
         for url in urls[:3]:
             for param in test_params[:3]:
-                # First get baseline
                 try:
                     baseline = self.http.get(url, params={param: "admin"})
                 except Exception:
@@ -220,7 +203,6 @@ class AdvancedScanner:
                 for payload in self.LDAP_PAYLOADS:
                     try:
                         resp = self.http.get(url, params={param: payload})
-                        # Check for LDAP errors
                         for pattern in self.LDAP_ERROR_PATTERNS:
                             if pattern in resp.text and pattern not in baseline.text:
                                 self._add_finding(
@@ -246,20 +228,14 @@ class AdvancedScanner:
     ]
 
     DESER_PAYLOADS = {
-        # Java serialization magic bytes (base64)
         "java": "rO0ABXNyABFqYXZhLmxhbmcuUnVudGltZQ==",
-        # PHP serialized object
         "php": 'O:8:"stdClass":1:{s:4:"test";s:4:"VAPT";}',
-        # Python pickle (harmless test)
         "python": "gASVDAAAAAAAAACMBHRlc3SFlC4=",
-        # .NET ViewState (test pattern)
         "dotnet": "/wEPDwUKMTk3NjI2MTQzMWRk",
     }
 
     def _test_deserialization(self, base: str, urls: list[str]) -> None:
-        """Test for insecure deserialization vulnerabilities."""
         for url in urls[:5]:
-            # Test each serialization format
             for lang, payload in self.DESER_PAYLOADS.items():
                 try:
                     resp = self.http.post(
@@ -267,7 +243,6 @@ class AdvancedScanner:
                         data=payload,
                         headers={"Content-Type": self.DESER_HEADERS[0] if lang == "java" else "application/octet-stream"},
                     )
-                    # Check for deserialization errors (indicates processing)
                     error_patterns = [
                         "ClassNotFoundException", "InvalidClassException",
                         "unserialize()", "pickle", "UnpicklingError",
@@ -290,7 +265,6 @@ class AdvancedScanner:
                 except Exception:
                     continue
 
-            # Check for common deserialization endpoints
             deser_paths = [
                 "/api/import", "/api/upload", "/api/restore",
                 "/admin/import", "/xmlrpc.php", "/invoker/JMXInvokerServlet",
@@ -316,14 +290,13 @@ class AdvancedScanner:
 
 
     def _test_crlf(self, base: str, urls: list[str]) -> None:
-        """Test for CRLF injection / HTTP response splitting."""
         canary = "X-VAPT-Injected"
         payloads = [
             f"%0d%0a{canary}: true",
             "%0d%0aSet-Cookie: vapt=pwned",
             f"\r\n{canary}: true",
             "%0d%0a%0d%0a<script>alert(1)</script>",
-            f"%E5%98%8A%E5%98%8D{canary}: true",  # Unicode CRLF
+            f"%E5%98%8A%E5%98%8D{canary}: true",
         ]
 
         for url in urls[:5]:
@@ -345,7 +318,6 @@ class AdvancedScanner:
                         )
                         break
 
-                    # Check for Set-Cookie injection
                     cookies = resp.headers.get("Set-Cookie", "")
                     if "vapt=pwned" in cookies:
                         self._add_finding(
@@ -364,7 +336,6 @@ class AdvancedScanner:
 
 
     def _test_cache_poisoning(self, base: str, urls: list[str]) -> None:
-        """Test for web cache poisoning via unkeyed headers."""
         canary = f"vapt-{''.join(random.choices(string.ascii_lowercase, k=6))}"
         poison_headers = [
             ("X-Forwarded-Host", f"{canary}.evil.com"),
@@ -376,7 +347,6 @@ class AdvancedScanner:
         ]
 
         for url in urls[:3]:
-            # Get baseline
             try:
                 baseline = self.http.get(url)
             except Exception:
@@ -400,7 +370,6 @@ class AdvancedScanner:
                         break
 
                     if resp.text != baseline.text and abs(len(resp.text) - len(baseline.text)) > 50:
-                        # Check caching headers
                         cache_headers = resp.headers.get("Cache-Control", "") + resp.headers.get("X-Cache", "")
                         if "public" in cache_headers.lower() or "HIT" in cache_headers:
                             self._add_finding(
@@ -418,10 +387,8 @@ class AdvancedScanner:
 
 
     def _test_host_header(self, base: str, urls: list[str]) -> None:
-        """Test for host header injection across multiple techniques."""
         evil_host = "evil.vapt-test.com"
         for url in urls[:3]:
-            # Technique 1: Direct Host override
             try:
                 resp = self.http.get(url, headers={"Host": evil_host})
                 if evil_host in resp.text:
@@ -438,7 +405,6 @@ class AdvancedScanner:
             except Exception:
                 pass
 
-            # Technique 2: X-Forwarded-Host
             try:
                 resp = self.http.get(url, headers={"X-Forwarded-Host": evil_host})
                 if evil_host in resp.text:
@@ -457,13 +423,11 @@ class AdvancedScanner:
 
 
     def _test_websocket(self, base: str) -> None:
-        """Check for WebSocket endpoints and their security."""
         ws_paths = ["/ws", "/websocket", "/socket", "/ws/", "/socket.io/", "/sockjs/", "/cable", "/hub"]
 
         for path in ws_paths:
             url = urljoin(base, path)
             try:
-                # HTTP request to check if endpoint exists (upgrade check)
                 resp = self.http.get(url, headers={
                     "Upgrade": "websocket",
                     "Connection": "Upgrade",
@@ -472,7 +436,6 @@ class AdvancedScanner:
                 })
 
                 if resp.status_code == 101 or "upgrade" in resp.headers.get("Connection", "").lower():
-                    # Check for CSWSH (Cross-Site WebSocket Hijacking)
                     resp2 = self.http.get(url, headers={
                         "Upgrade": "websocket",
                         "Connection": "Upgrade",
@@ -492,7 +455,6 @@ class AdvancedScanner:
                         )
 
                 elif resp.status_code in (200, 400, 426):
-                    # WebSocket endpoint detected but might need upgrade
                     if "websocket" in resp.text.lower() or resp.status_code == 426:
                         self._add_finding(
                             vuln_id="ADV-007",
@@ -518,7 +480,6 @@ class AdvancedScanner:
     }
 
     def _test_csp(self, base: str) -> None:
-        """Analyze Content Security Policy for weaknesses."""
         try:
             resp = self.http.get(base)
             csp = resp.headers.get("Content-Security-Policy", "")
@@ -546,7 +507,6 @@ class AdvancedScanner:
                     if dangerous in directive:
                         issues.append(f"  • {directive.split()[0]}: '{dangerous}' — {reason}")
 
-            # Check for missing directives
             important = ["default-src", "script-src", "object-src", "base-uri"]
             for d in important:
                 if d not in policy:
@@ -568,14 +528,12 @@ class AdvancedScanner:
 
 
     def _add_finding(self, **kwargs) -> None:
-        """Add an enriched finding with full evidence."""
         finding = {
             "scanner": "AdvancedScanner",
             "request": self.http.last_request,
             "response": self.http.last_response,
             **kwargs,
         }
-        # Dedup by vuln_id + url + parameter
         dedup = f"{finding.get('vuln_id', '')}-{finding.get('url', '')}-{finding.get('parameter', '')}"
         for existing in self.findings:
             if existing.get("_dedup") == dedup:

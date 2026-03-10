@@ -1,4 +1,3 @@
-"""Directory and path fuzzer with smart wordlists."""
 
 from __future__ import annotations
 
@@ -14,55 +13,41 @@ from vapt.utils.helpers import sanitize_target
 
 
 DIR_WORDLIST = [
-    # Admin panels
     "admin", "administrator", "admin-panel", "admin_panel", "admincp",
     "admin1", "admin2", "admin123", "adm", "backend",
     "control", "control-panel", "controlpanel", "cp", "cpanel",
     "dashboard", "dash", "management", "manage", "mgmt",
     "panel", "portal", "superadmin", "sysadmin", "webadmin",
-    # Auth / user management
     "login", "signin", "signup", "register", "auth", "authentication",
     "logout", "account", "accounts", "profile", "user", "users",
     "members", "member", "staff", "employee",
-    # APIs
     "api", "api-v1", "api-v2", "api/v1", "api/v2",
     "rest", "restapi", "graphql", "gql", "soap", "rpc",
     "webhook", "webhooks", "callback",
-    # Dev / debug
     "dev", "development", "staging", "test", "testing",
     "debug", "debugger", "console", "shell", "terminal",
     "logs", "log", "logging", "trace", "profiler",
     "phpinfo", "info", "status", "health", "ping",
-    # Sensitive files / dirs
     "backup", "backups", "bak", "old", "archive", "archives",
     "temp", "tmp", "cache", "data", "database", "db",
     "sql", "dump", "export", "import",
     "config", "configuration", "conf", "settings", "env",
     "secret", "secrets", "credentials", "creds", "keys", "tokens",
     "private", "hidden", "internal",
-    # Version control
     ".git", ".svn", ".hg", ".bzr",
-    # Source / build
     "src", "source", "build", "dist", "release", "app", "application",
     "public", "static", "assets", "media", "upload", "uploads", "files",
-    # PHP specific
     "phpmyadmin", "pma", "phpmyadmin2", "mysql", "adminer",
     "wp-admin", "wp-login.php", "wp-content", "wordpress",
     "xmlrpc.php", "readme.html", "license.txt",
-    # Python / Django / Flask
     "django-admin", "_admin", "admin/doc",
-    # Spring / Java
     "actuator", "spring", "console", "h2-console",
-    # Node.js
     "node_modules", ".env", "package.json",
-    # Docs / swagger
     "docs", "documentation", "swagger", "openapi", "redoc",
     "api-docs", "swagger-ui", "swagger.json", "openapi.json",
-    # Cloud / infra
     "aws", "azure", "gcp", "k8s", "kubernetes", "docker",
     "jenkins", "ci", "cd", "gitlab", "github", "bitbucket",
     "sonar", "jira", "confluence",
-    # Monitoring
     "grafana", "kibana", "prometheus", "nagios", "zabbix",
     "monitor", "monitoring", "metrics", "datadog",
 ]
@@ -101,34 +86,22 @@ HIGH_VALUE_FILES = [
 ]
 
 PARAM_FUZZ_VALUES = [
-    # Type confusion
     "0", "-1", "99999999", "null", "undefined", "true", "false",
-    # Special chars
     "%00", "%0a", "%09", "\\x00",
-    # Overflow
     "A" * 1000, "1" * 1000,
-    # Negative / boundary
     "0.0", "-0", "2147483647", "2147483648", "-2147483648",
-    # Format strings
     "%s%s%s%s", "%d%d%d%d",
-    # Injection starts
     "'", '"', "<", ">", ";", "|", "&",
-    # Boolean-like
     "1 OR 1=1",
-    # Array-like
     "[]", "{}", "[[]]",
-    # Unicode
     "\u0000", "\uFEFF",
 ]
 
-# 403 excluded — server correctly blocking access
-# 401 excluded — auth working as intended
 ACCESSIBLE_STATUS = {200, 201, 206}
 REDIRECT_STATUS = {301, 302, 307}
 
 
 class Fuzzer:
-    """Directory brute-forcer, file enumerator, and parameter fuzzer."""
 
     def __init__(
         self,
@@ -153,7 +126,6 @@ class Fuzzer:
             })
 
     def run(self, target: str) -> dict[str, Any]:
-        """Run directory brute-force, file enumeration, and IDOR checks."""
         target = sanitize_target(target)
         base_url = target if target.startswith(("http://", "https://")) else f"https://{target}"
 
@@ -176,7 +148,6 @@ class Fuzzer:
 
 
     def _build_path_list(self) -> list[str]:
-        """Combine wordlist + extensions + high-value files."""
         paths: list[str] = list(HIGH_VALUE_FILES)
         for word in DIR_WORDLIST:
             paths.append(f"/{word}")
@@ -185,16 +156,13 @@ class Fuzzer:
                 for ext in FILE_EXTENSIONS:
                     paths.append(f"/{word}{ext}")
 
-        # cap paths to avoid hammering target
         max_paths = self.safety_config.get("max_fuzz_paths")
         if max_paths and len(paths) > max_paths:
-            # high-value files are first in the list
             paths = paths[:max_paths]
 
         return paths
 
     def _bruteforce(self, base_url: str, paths: list[str]) -> list[dict]:
-        """Probe all paths concurrently and return interesting findings."""
         findings: list[dict] = []
         url_base = base_url.rstrip("/")
 
@@ -212,12 +180,6 @@ class Fuzzer:
         return findings
 
     def _probe(self, url: str) -> dict | None:
-        """Probe a single URL and return a finding ONLY if content is actually exposed.
-
-        KEY PRINCIPLE: A 403/401 is NOT a vulnerability — it means the server
-        is correctly blocking access. Only 200/201/206 responses where we can
-        actually SEE sensitive content are real findings.
-        """
         try:
             resp = self.session.get(url, timeout=self.timeout, allow_redirects=False)
 
@@ -228,7 +190,6 @@ class Fuzzer:
             body = resp.text if resp.text else ""
             body_len = len(resp.content)
 
-            # filter soft-404s, CDN pages, error pages served as 200
             if not self._is_real_content(path, body, body_len, resp):
                 return None
 
@@ -261,14 +222,6 @@ class Fuzzer:
 
     def _is_real_content(self, path: str, body: str, body_len: int,
                           resp: "requests.Response") -> bool:
-        """Validate that a 200 response contains REAL sensitive content.
-
-        Returns False for:
-        - Generic error pages served as 200 (soft 404s)
-        - CDN/WAF block pages served as 200
-        - Empty or near-empty responses
-        - Default framework welcome pages
-        """
         body_lower = body.lower()
         pl = path.lower()
 
@@ -282,16 +235,15 @@ class Fuzzer:
             "resource not found", "nothing here",
         ]
         if any(pat in body_lower for pat in SOFT_404_PATTERNS):
-            # real config files may contain "not found" strings
-            if body_len < 2000:  # Short pages with "not found" = soft 404
+            if body_len < 2000:
                 return False
 
         CDN_BLOCK_PATTERNS = [
             "access denied", "error from cloudfront",
             "attention required", "checking your browser",
             "please wait while", "just a moment",
-            "reference #",  # Akamai error pages
-            "errors.edgesuite.net",  # Akamai
+            "reference #",
+            "errors.edgesuite.net",
             "cloudflare", "incapsula",
         ]
         if any(pat in body_lower for pat in CDN_BLOCK_PATTERNS):
@@ -318,8 +270,8 @@ class Fuzzer:
             config_indicators = [
                 "password", "secret", "key", "token", "database",
                 "db_host", "api_key", "aws_", "private",
-                "<?", "import ", "def ", "class ",  # Source code
-                "{", "[",  # JSON/YAML structure
+                "<?", "import ", "def ", "class ",
+                "{", "[",
             ]
             return any(ind in body_lower for ind in config_indicators)
 
@@ -327,7 +279,6 @@ class Fuzzer:
             return any(kw in body_lower for kw in
                        ["create table", "insert into", "drop table", "alter table"])
 
-        # binary archives: reject tiny responses as fake
         if any(ext in pl for ext in [".zip", ".tar.gz", ".tgz", ".7z", ".gz"]):
             return body_len > 100 and not body_lower.startswith("<!")
 
@@ -354,7 +305,6 @@ class Fuzzer:
         if "phpinfo" in pl or "info.php" in pl:
             return "php version" in body_lower or "phpinfo()" in body_lower
 
-        # only flag if showing actual login form or admin content
         if any(p in pl for p in ["admin", "panel", "dashboard", "management", "backend"]):
             admin_indicators = [
                 "<form", "login", "password", "username",
@@ -363,7 +313,6 @@ class Fuzzer:
             ]
             return any(ind in body_lower for ind in admin_indicators)
 
-        # reject very short or error-like responses
         if body_len < 100:
             return False
 
@@ -380,11 +329,6 @@ class Fuzzer:
     def _classify_path(
         path: str, resp: requests.Response
     ) -> tuple[str, str, str, float]:
-        """Assign category, vuln_id, severity, and CVSS based on path type.
-
-        NOTE: This is only called for ACCESSIBLE (200/201/206) responses
-        that passed content validation, so every finding here is real.
-        """
         pl = path.lower()
         body = resp.text.lower() if resp.text else ""
 
@@ -431,12 +375,6 @@ class Fuzzer:
 
 
     def _idor_enum(self, base_url: str) -> list[dict]:
-        """
-        Test for IDOR by enumerating numeric IDs on common object endpoints.
-
-        We GET /api/v1/users/1, /2, /3 … and check if we receive different
-        valid objects — indicating no access control between records.
-        """
         findings: list[dict] = []
         idor_paths = [
             "/api/v1/users/{id}", "/api/v2/users/{id}", "/api/users/{id}",
@@ -449,7 +387,7 @@ class Fuzzer:
         test_ids = [1, 2, 3, 100, 1000]
 
         for path_template in idor_paths:
-            responses: list[tuple[int, int, int]] = []  # (id, status, body_length)
+            responses: list[tuple[int, int, int]] = []
             for test_id in test_ids:
                 url = base_url.rstrip("/") + path_template.format(id=test_id)
                 try:

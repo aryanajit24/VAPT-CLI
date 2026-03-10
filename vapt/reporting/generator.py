@@ -1,8 +1,6 @@
-"""Report generation dispatcher."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +12,9 @@ from vapt.utils.validators import sanitize_filename
 
 
 class ReportGenerator:
-    """High-level orchestrator that fans out to format-specific reporters."""
 
     def __init__(self, output_dir: str | Path = ".") -> None:
         self.output_dir = Path(output_dir)
-        # Create the output directory up front so reporters don't have to
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def generate(
@@ -27,19 +23,6 @@ class ReportGenerator:
         formats: list[str] | None = None,
         filename_prefix: str | None = None,
     ) -> dict[str, str]:
-        """
-        Generate reports in all requested formats.
-
-        Parameters
-        ----------
-        scan_result:     Aggregated scan result dict.
-        formats:         List of formats: 'pdf', 'html', 'json'. Defaults to ['html'].
-        filename_prefix: Base name for output files. Auto-generated if None.
-
-        Returns
-        -------
-        Dict mapping format name to the output file path.
-        """
         if formats is None:
             formats = ["html"]
 

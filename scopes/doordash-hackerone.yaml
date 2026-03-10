@@ -1,0 +1,198 @@
+# ─────────────────────────────────────────────────────────────────
+# DoorDash Bug Bounty Program — HackerOne
+# ─────────────────────────────────────────────────────────────────
+# Source: https://hackerone.com/doordash
+# Last updated: 2026-03-09
+#
+# ⚠️  IMPORTANT: DoorDash explicitly prohibits automated scanners.
+#     Set no_automated_scanners: true — the tool will use passive
+#     recon, JS analysis, and manual-grade checks only.
+# ─────────────────────────────────────────────────────────────────
+
+program:
+  name: DoorDash
+  platform: hackerone
+  url: https://hackerone.com/doordash
+
+scope:
+  in_scope:
+    # ── Bounty-eligible assets ──────────────────────────────────
+    - target: "www.doordash.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Consumer web — 1 resolved report (50%). Primary target."
+
+    - target: "doordash.DoorDashConsumer"
+      type: mobile
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Consumer iOS app (App Store)"
+
+    - target: "com.dd.doordash"
+      type: mobile
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Consumer Android app (Play Store)"
+
+  out_of_scope:
+    # ── Ineligible domains (max_severity: none) ─────────────────
+    - target: "unified-gateway.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "track.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "merchant-portal.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "merchant-mobile-bff.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "ir.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "internal.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "doordash.com/merchant"
+      type: web
+      notes: "Merchant portal URL — ineligible"
+
+    - target: "help.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "doordash.com/unified-gateway/*"
+      type: web
+      notes: "Unified gateway wildcard — ineligible"
+
+    - target: "doordash.com/orders/drive/*"
+      type: web
+      notes: "Drive orders wildcard — ineligible"
+
+    - target: "consumer-mobile-bff.doordash.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "careersatdoordash.com"
+      type: web
+      notes: "Careers site — ineligible"
+
+    - target: "*.order.online"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "*.doorcrawl.com"
+      type: web
+      notes: "Ineligible per program"
+
+    - target: "*.dashapi.com"
+      type: web
+      notes: "Ineligible per program"
+
+# ── Excluded vulnerability categories ──────────────────────────
+# Copied directly from DoorDash's program policy.
+excluded_vulnerabilities:
+  - category: rbac_permissions
+    reason: "RBAC / Permissions Without Risk"
+    detail: >
+      Role restrictions by business design (dasher vs consumer vs merchant)
+      that don't lead to security risk or PII exposure are excluded.
+
+  - category: leaked_credentials_external
+    reason: "Leaked User Credentials from External Sources"
+    detail: >
+      Third-party breach dumps, paste sites, OSINT scraping not eligible.
+      Only leaks from DoorDash-owned systems qualify.
+
+  - category: information_disclosure
+    reason: "Information Disclosure Without Exploitability"
+    detail: >
+      API version banners, verbose error messages, generic stack traces
+      that don't lead to sensitive data access are out of scope.
+
+  - category: open_redirect
+    reason: "Open Redirects Without Escalation"
+    detail: >
+      Redirects that cannot be chained into phishing, account takeover,
+      or token leakage are excluded.
+
+  - category: missing_security_headers
+    reason: "Missing or Misconfigured Security Headers"
+    detail: >
+      Absence of HttpOnly, Secure, X-Frame-Options, CSP unless a
+      demonstrable exploit (XSS, clickjacking on payment/checkout) is shown.
+
+  - category: self_xss
+    reason: "Self-XSS / Self-DoS"
+    detail: >
+      Bugs that only impact the reporter's own account/session are excluded.
+
+  - category: csrf_low_impact
+    reason: "CSRF / Clickjacking Without Sensitive Action"
+    detail: >
+      CSRF/clickjacking on non-critical functions (liking a restaurant,
+      updating delivery notes). Payment, payout, or password changes qualify.
+
+  - category: mobile_low_impact
+    reason: "Low-Impact Mobile Findings"
+    detail: >
+      Missing cert pinning, jailbreak/root detection, insecure local storage
+      that don't lead to account compromise, data theft, or fraud.
+
+  - category: rate_limiting
+    reason: "Rate Limiting / Brute Force Without Impact"
+    detail: >
+      Missing rate limits, username/email enumeration, brute force that
+      doesn't result in credential compromise, payment fraud, or order manipulation.
+
+  - category: spf_dmarc
+    reason: "Email configuration issues excluded"
+
+  - category: clickjacking
+    reason: "Only on sensitive actions (payment, checkout)"
+    detail: >
+      Generic clickjacking without exploit chain on payment/checkout
+      pages is excluded.
+
+# ── Bounty tiers ───────────────────────────────────────────────
+# DoorDash doesn't publish exact tiers; these are estimates based on
+# HackerOne averages for programs of this size.
+bounty:
+  - severity: critical
+    min: 2000
+    max: 10000
+  - severity: high
+    min: 1000
+    max: 5000
+  - severity: medium
+    min: 250
+    max: 1000
+  - severity: low
+    min: 100
+    max: 250
+
+# ── Testing rules ──────────────────────────────────────────────
+testing:
+  max_requests_per_second: 2
+  no_automated_scanners: true        # ⚠️ DoorDash EXPLICITLY prohibits automated scanners
+  no_destructive_testing: true       # "No disruptive testing" — no writes, no deletes
+  required_headers:
+    X-Bug-Bounty: vapt-researcher    # Required by DoorDash for all testing
+  # proxy_required: false
+
+# ── Modules ────────────────────────────────────────────────────
+# Because of the no-scanner policy, we only run passive/low-impact modules.
+# No active fuzzing, no smuggling, no race conditions.
+modules:
+  - web       # passive header/cookie/CORS checks
+  - ssl       # TLS configuration (passive)
+  - jsscan    # JS secret/endpoint mining (passive — reads public JS files)
+  - cve       # version fingerprinting (passive)

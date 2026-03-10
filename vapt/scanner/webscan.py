@@ -1,4 +1,3 @@
-"""Core web vulnerability scanner for injection, XSS, SSRF, and more."""
 
 from __future__ import annotations
 
@@ -225,7 +224,6 @@ TAKEOVER_SERVICES = {
 
 
 class WebScanner:
-    """Full bug-bounty-style web vulnerability scanner."""
 
     def __init__(
         self,
@@ -245,13 +243,11 @@ class WebScanner:
             self._raw_session.headers.update({
                 "User-Agent": "Mozilla/5.0 (compatible; VAPT-Scanner/2.0; ethical-scan)"
             })
-        # Wrap session with EvidenceCollector for request/response capture
         from vapt.engine.evidence import EvidenceCollector
         self.session = EvidenceCollector(self._raw_session, timeout)
 
 
     def run(self, target: str) -> dict[str, Any]:
-        """Crawl and attack the target. Returns consolidated findings."""
         target = sanitize_target(target)
         base_url = target if target.startswith(("http://", "https://")) else f"https://{target}"
 
@@ -270,7 +266,6 @@ class WebScanner:
         results["status_code"] = root_resp.status_code
         results["final_url"] = root_resp.url
 
-        # Passive checks on root response
         results["findings"] += self._check_security_headers(root_resp)
         results["findings"] += self._check_tls(base_url)
         results["findings"] += self._check_ssl_expiry(base_url)
@@ -281,13 +276,11 @@ class WebScanner:
         results["findings"] += self._check_cors(base_url)
         results["findings"] += self._check_robots_txt(base_url)
 
-        # Crawl the entire site
         pages, forms, url_params = self._crawl(base_url)
         results["pages_crawled"] = len(pages)
         results["forms_tested"] = len(forms)
         results["params_tested"] = len(url_params)
 
-        # Active attacks on all discovered input vectors
         sc = self.safety_config
         results["findings"] += self._attack_url_params(url_params)
         results["findings"] += self._attack_forms(forms, base_url)
@@ -301,7 +294,6 @@ class WebScanner:
         results["findings"] += self._check_subdomain_takeover(base_url)
         results["findings"] += self._check_open_redirect(base_url)
 
-        # Deduplicate by (vuln_id, title)
         seen: set[tuple] = set()
         unique: list[dict] = []
         for f in results["findings"]:
@@ -314,7 +306,6 @@ class WebScanner:
 
 
     def _crawl(self, base_url: str) -> tuple[list[str], list[dict], list[str]]:
-        """BFS spider — discovers pages, forms, and URL parameters."""
         origin = urlparse(base_url).netloc
         visited: set[str] = set()
         queue: deque[str] = deque([base_url])
@@ -381,7 +372,6 @@ class WebScanner:
 
     def _test_sqli_param(self, parsed, param: str) -> list[dict]:
         sc = self.safety_config
-        # Error-based (always safe — just reads error messages)
         for payload in SQLI_ERROR_PAYLOADS:
             try:
                 resp = self.session.get(
@@ -399,7 +389,6 @@ class WebScanner:
                     )]
             except RequestException:
                 pass
-        # Time-based blind — SAFETY GATED (SLEEP can cause load)
         if not sc.get("skip_time_blind_sqli"):
             for payload, delay in SQLI_BLIND_PAYLOADS:
                 try:
@@ -474,7 +463,6 @@ class WebScanner:
         return []
 
     def _test_cmd_param(self, parsed, param: str) -> list[dict]:
-        # SAFETY GATE — command injection payloads execute OS commands
         if self.safety_config.get("skip_command_exec"):
             return []
         for payload, hit_pattern in CMD_PAYLOADS:
@@ -538,7 +526,6 @@ class WebScanner:
             return None
 
     def _test_form_sqli(self, form: dict, field: str) -> list[dict]:
-        # Error-based (always safe)
         for payload in SQLI_ERROR_PAYLOADS:
             resp = self._submit(form, field, payload)
             if resp and SQLI_ERROR_PATTERN.search(resp.text):
@@ -549,7 +536,6 @@ class WebScanner:
                     "critical", 9.8, url=form["action"], parameter=field, payload=payload,
                     evidence=resp.text[:500],
                 )]
-        # Time-based blind — SAFETY GATED
         if not self.safety_config.get("skip_time_blind_sqli"):
             for payload, delay in SQLI_BLIND_PAYLOADS:
                 start = time.time()
@@ -591,7 +577,6 @@ class WebScanner:
         return []
 
     def _test_form_cmd(self, form: dict, field: str) -> list[dict]:
-        # SAFETY GATE — command injection payloads execute OS commands
         if self.safety_config.get("skip_command_exec"):
             return []
         for payload, hit_pattern in CMD_PAYLOADS:
@@ -629,22 +614,18 @@ class WebScanner:
 
     @staticmethod
     def _is_block_or_error_page(body: str, body_len: int) -> bool:
-        """Detect CDN/WAF block pages and soft-404 pages served as HTTP 200."""
         lower = body.lower()
-        # CDN / WAF block pages
         if any(p in lower for p in [
             "access denied", "error from cloudfront", "errors.edgesuite.net",
             "checking your browser", "attention required", "please wait while",
             "incapsula", "cloudflare", "just a moment", "reference #",
         ]):
             return True
-        # Soft-404 patterns (short pages saying "not found")
         if body_len < 2000 and any(p in lower for p in [
             "page not found", "404 not found", "not found",
             "does not exist", "could not be found", "no longer available",
         ]):
             return True
-        # Default web server pages
         if any(p in lower for p in [
             "welcome to nginx", "apache2 debian default page", "it works!",
             "iis windows server",
@@ -663,11 +644,9 @@ class WebScanner:
                 body = resp.text
                 body_len = len(resp.content)
 
-                # Reject CDN/WAF block pages and soft-404s
                 if self._is_block_or_error_page(body, body_len):
                     continue
 
-                # Content-specific validation
                 if path == "/.env" and not re.search(r"^[A-Z_]+=.+", body, re.MULTILINE):
                     continue
                 if "/.env." in path and not re.search(r"^[A-Z_]+=.+", body, re.MULTILINE):
@@ -701,11 +680,9 @@ class WebScanner:
                 if any(ext in path for ext in [".zip", ".tar.gz", ".tgz"]):
                     if body_len < 100 or body.lstrip().startswith("<!"):
                         continue
-                # Admin panels — only report if they show actual admin content
                 if path.rstrip("/") in ("/admin", "/administrator", "/phpmyadmin", "/adminer.php"):
                     if not any(ind in body.lower() for ind in ["<form", "login", "password", "username", "sign in"]):
                         continue
-                # Reject very small responses (likely empty stubs)
                 if body_len < 10:
                     continue
 
@@ -836,7 +813,6 @@ class WebScanner:
 
 
     def _check_subdomain_takeover(self, base_url: str) -> list[dict]:
-        """Check if CNAME points to an unclaimed third-party service."""
         try:
             import dns.resolver
             host = urlparse(base_url).hostname or ""
@@ -866,7 +842,6 @@ class WebScanner:
                                         f"Body preview: {resp.text[:300]}"
                                     ),
                                 )]
-                            # If CNAME points to service but page returns error/empty
                             if resp.status_code in (404, 410) or len(resp.content) < 100:
                                 return [self._f(
                                     "WEB-013", "subdomain_takeover",
@@ -885,7 +860,6 @@ class WebScanner:
                                     ),
                                 )]
                         except RequestException:
-                            # Connection refused or timeout — service may be completely unclaimed
                             return [self._f(
                                 "WEB-013", "subdomain_takeover",
                                 f"Likely subdomain takeover ({svc_name}) — connection failed",
@@ -1004,7 +978,6 @@ class WebScanner:
                     "Information disclosure", desc, "medium", 5.3,
                     evidence=re.search(pattern, resp.text, re.IGNORECASE).group(0)[:200],
                 ))
-        # Check HTML comments for sensitive information
         comment_re = re.compile(r"<!--(.*?)-->", re.DOTALL)
         for match in comment_re.finditer(resp.text):
             comment = match.group(1).strip()
@@ -1026,12 +999,11 @@ class WebScanner:
                         "low", 3.7,
                         evidence=f"Comment: {comment[:300]}",
                     ))
-                    break  # One finding per comment
+                    break
         return findings
 
 
     def _check_technology_disclosure(self, resp: requests.Response) -> list[dict]:
-        """Check response headers for technology and version disclosure."""
         findings = []
         disclosure_headers = {
             "Server": "Web server version disclosed",
@@ -1043,7 +1015,6 @@ class WebScanner:
         for header_name, desc in disclosure_headers.items():
             value = resp.headers.get(header_name, "")
             if value:
-                # Only report if it contains a version number or specific technology
                 if re.search(r"\d+\.\d+|php|apache|nginx|iis|express|tomcat|jetty|django|rails|asp\.net", value, re.IGNORECASE):
                     findings.append(self._f(
                         "WEB-014", "info_disclosure",
@@ -1057,13 +1028,11 @@ class WebScanner:
 
 
     def _check_cors(self, base_url: str) -> list[dict]:
-        """Test for CORS misconfiguration by sending a request with an evil Origin."""
         findings = []
-        # Test with attacker-controlled origin
         evil_origins = [
             "https://evil.com",
-            f"https://{urlparse(base_url).hostname}.evil.com",  # subdomain trick
-            "null",  # null origin
+            f"https://{urlparse(base_url).hostname}.evil.com",
+            "null",
         ]
         for origin in evil_origins:
             try:
@@ -1074,7 +1043,6 @@ class WebScanner:
                 acao = resp.headers.get("Access-Control-Allow-Origin", "")
                 acac = resp.headers.get("Access-Control-Allow-Credentials", "").lower()
 
-                # Critical: Origin reflected WITH credentials
                 if acao == origin and acac == "true":
                     findings.append(self._f(
                         "WEB-017", "cors",
@@ -1088,9 +1056,8 @@ class WebScanner:
                             f"Access-Control-Allow-Credentials: {acac}"
                         ),
                     ))
-                    break  # One CORS finding is enough
+                    break
 
-                # Medium: Origin reflected WITHOUT credentials
                 elif acao == origin:
                     findings.append(self._f(
                         "WEB-017", "cors",
@@ -1110,20 +1077,17 @@ class WebScanner:
 
 
     def _check_robots_txt(self, base_url: str) -> list[dict]:
-        """Parse robots.txt for hidden/sensitive paths, then check if they're accessible."""
         findings = []
         robots_url = base_url.rstrip("/") + "/robots.txt"
         try:
             resp = self.session.get(robots_url, timeout=self.timeout)
             if resp.status_code != 200 or "disallow" not in resp.text.lower():
                 return []
-            # Don't count block pages as real robots.txt
             if self._is_block_or_error_page(resp.text, len(resp.content)):
                 return []
         except RequestException:
             return []
 
-        # Parse Disallow entries for sensitive paths
         sensitive_keywords = [
             "admin", "backup", "config", "secret", "private", "internal",
             "api", "debug", "test", "staging", "dev", "cgi-bin", "tmp",
@@ -1136,7 +1100,6 @@ class WebScanner:
             path = line.split(":", 1)[1].strip()
             if not path or path == "/":
                 continue
-            # Only check paths that look sensitive
             path_lower = path.lower()
             if not any(kw in path_lower for kw in sensitive_keywords):
                 continue
@@ -1145,7 +1108,6 @@ class WebScanner:
                 check_resp = self.session.get(check_url, timeout=self.timeout, allow_redirects=False)
                 if check_resp.status_code in (200, 206):
                     body = check_resp.text
-                    # Filter out CDN/WAF blocks
                     if self._is_block_or_error_page(body, len(check_resp.content)):
                         continue
                     if len(check_resp.content) < 10:

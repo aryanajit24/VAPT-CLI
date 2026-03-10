@@ -1,4 +1,3 @@
-"""TCP port scanner with service fingerprinting."""
 
 from __future__ import annotations
 
@@ -46,10 +45,8 @@ RISKY_PORTS: dict[int, tuple[str, str, float]] = {
     28017: ("MongoDB REST API — full DB access", "critical", 9.8),
 }
 
-# Default credentials to test per service port
-# Format: port → [(username, password), ...]
 DEFAULT_CREDS: dict[int, list[tuple[str, str]]] = {
-    21: [  # FTP
+    21: [
         ("anonymous", "anonymous"),
         ("anonymous", ""),
         ("admin", "admin"),
@@ -58,7 +55,7 @@ DEFAULT_CREDS: dict[int, list[tuple[str, str]]] = {
         ("root", "root"),
         ("root", ""),
     ],
-    3306: [  # MySQL
+    3306: [
         ("root", ""),
         ("root", "root"),
         ("root", "password"),
@@ -66,42 +63,41 @@ DEFAULT_CREDS: dict[int, list[tuple[str, str]]] = {
         ("admin", "admin"),
         ("mysql", "mysql"),
     ],
-    5432: [  # PostgreSQL
+    5432: [
         ("postgres", "postgres"),
         ("postgres", ""),
         ("postgres", "password"),
         ("admin", "admin"),
     ],
-    1433: [  # MSSQL
+    1433: [
         ("sa", ""),
         ("sa", "sa"),
         ("sa", "password"),
         ("sa", "Password1"),
         ("admin", "admin"),
     ],
-    27017: [  # MongoDB (no-auth check via HTTP API on 28017)
-        ("", ""),  # no-auth
-    ],
-    6379: [  # Redis (no-auth check via PING)
-        ("", ""),  # no-auth
-    ],
-    9200: [  # Elasticsearch no-auth check
+    27017: [
         ("", ""),
     ],
-    5984: [  # CouchDB admin party check
+    6379: [
         ("", ""),
     ],
-    5900: [  # VNC no-auth
+    9200: [
         ("", ""),
     ],
-    8888: [  # Jupyter
+    5984: [
+        ("", ""),
+    ],
+    5900: [
+        ("", ""),
+    ],
+    8888: [
         ("", ""),
     ],
 }
 
 
 class PortScanner:
-    """Discover open ports, grab banners, and test default credentials."""
 
     def __init__(self, timeout: int = 5) -> None:
         self.timeout = timeout
@@ -124,9 +120,8 @@ class PortScanner:
 
 
     def _scan(self, host: str, ports: str) -> list[dict[str, Any]]:
-        """nmap if available, else socket fallback."""
         try:
-            import nmap  # type: ignore
+            import nmap
             nm = nmap.PortScanner()
             nm.scan(host, ports, arguments=f"-sV -T4 --host-timeout {self.timeout*2}s --script=banner")
             results = []
@@ -150,14 +145,12 @@ class PortScanner:
             return [{"error": str(exc)}]
 
     def _socket_scan(self, host: str, ports: str) -> list[dict[str, Any]]:
-        """TCP connect scan with basic banner grab."""
         results = []
         for port in self._parse_ports(ports):
             with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
                 s.settimeout(self.timeout)
                 try:
                     s.connect((host, port))
-                    # Attempt banner grab
                     banner = ""
                     try:
                         s.send(b"HEAD / HTTP/1.0\r\n\r\n")
@@ -198,7 +191,6 @@ class PortScanner:
                     "banner": port_info.get("banner", ""),
                 })
 
-            # Default credential tests
             if port in DEFAULT_CREDS:
                 cred_findings = self._test_default_creds(host, port, port_info)
                 findings += cred_findings
@@ -209,7 +201,6 @@ class PortScanner:
     def _test_default_creds(
         self, host: str, port: int, port_info: dict
     ) -> list[dict[str, Any]]:
-        """Try default credentials for the given service."""
         findings = []
 
         if port == 6379:
@@ -232,7 +223,6 @@ class PortScanner:
         return findings
 
     def _check_redis_noauth(self, host: str) -> list[dict]:
-        """Connect to Redis and send PING — if we get PONG, no auth required."""
         try:
             with _socket.create_connection((host, 6379), timeout=self.timeout) as s:
                 s.send(b"PING\r\n")
@@ -250,7 +240,6 @@ class PortScanner:
         return []
 
     def _check_elasticsearch_noauth(self, host: str) -> list[dict]:
-        """GET / on Elasticsearch — 200 without auth = no auth."""
         try:
             import requests
             resp = requests.get(f"http://{host}:9200/", timeout=self.timeout, verify=False)
@@ -267,7 +256,6 @@ class PortScanner:
         return []
 
     def _check_couchdb_noauth(self, host: str) -> list[dict]:
-        """GET /_all_dbs on CouchDB — 200 without auth = admin party."""
         try:
             import requests
             resp = requests.get(f"http://{host}:5984/_all_dbs", timeout=self.timeout, verify=False)
@@ -284,7 +272,6 @@ class PortScanner:
         return []
 
     def _check_mongodb_noauth(self, host: str) -> list[dict]:
-        """Check MongoDB REST API for unauthenticated access."""
         try:
             import requests
             resp = requests.get(f"http://{host}:28017/", timeout=self.timeout, verify=False)
@@ -300,7 +287,6 @@ class PortScanner:
         return []
 
     def _check_ftp_default(self, host: str, port: int) -> list[dict]:
-        """Try anonymous and common default FTP credentials."""
         findings = []
         try:
             import ftplib
@@ -327,7 +313,6 @@ class PortScanner:
         return findings
 
     def _check_mysql_default(self, host: str, port: int) -> list[dict]:
-        """Try common MySQL root credentials."""
         try:
             import importlib
             mysql = importlib.import_module("MySQLdb")
@@ -353,7 +338,6 @@ class PortScanner:
         return []
 
     def _check_postgres_default(self, host: str, port: int) -> list[dict]:
-        """Try common PostgreSQL credentials."""
         try:
             import psycopg2
         except ImportError:
@@ -375,7 +359,6 @@ class PortScanner:
         return []
 
     def _check_jupyter_noauth(self, host: str) -> list[dict]:
-        """Check if Jupyter Notebook is running without a password/token."""
         try:
             import requests
             resp = requests.get(f"http://{host}:8888/api/kernels", timeout=self.timeout, verify=False)

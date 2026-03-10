@@ -1,4 +1,3 @@
-"""Bug bounty report generator with platform-specific formatting."""
 
 from __future__ import annotations
 
@@ -7,7 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Vulnerability Category → CWE/OWASP Mapping
 
 VULN_REFERENCES = {
     "sqli": {"cwe": "CWE-89", "owasp": "A03:2021 Injection", "type": "SQL Injection"},
@@ -51,7 +49,6 @@ VULN_REFERENCES = {
     "insecure_cookie": {"cwe": "CWE-614", "owasp": "A05:2021 Security Misconfiguration", "type": "Insecure Cookie Configuration"},
     "blind_sqli": {"cwe": "CWE-89", "owasp": "A03:2021 Injection", "type": "Blind SQL Injection"},
     "path_traversal": {"cwe": "CWE-22", "owasp": "A01:2021 Broken Access Control", "type": "Path Traversal"},
-    "command_injection": {"cwe": "CWE-78", "owasp": "A03:2021 Injection", "type": "OS Command Injection"},
     "subdomain_takeover": {"cwe": "CWE-913", "owasp": "A05:2021 Security Misconfiguration", "type": "Subdomain Takeover"},
     "default_credentials": {"cwe": "CWE-798", "owasp": "A07:2021 Auth Failures", "type": "Default Credentials"},
     "tls": {"cwe": "CWE-295", "owasp": "A02:2021 Cryptographic Failures", "type": "SSL/TLS Vulnerability"},
@@ -71,28 +68,23 @@ VULN_REFERENCES = {
     "robots_exposure": {"cwe": "CWE-200", "owasp": "A01:2021 Broken Access Control", "type": "Robots.txt Sensitive Path Exposure"},
     "access_control": {"cwe": "CWE-284", "owasp": "A01:2021 Broken Access Control", "type": "Broken Access Control"},
     "endpoint_disclosure": {"cwe": "CWE-200", "owasp": "A01:2021 Broken Access Control", "type": "Hidden API Endpoint Disclosure"},
-    # Infrastructure categories
     "infrastructure": {"cwe": "CWE-16", "owasp": "A05:2021 Security Misconfiguration", "type": "Infrastructure Misconfiguration"},
     "actuator": {"cwe": "CWE-200", "owasp": "A05:2021 Security Misconfiguration", "type": "Spring Boot Actuator Exposure"},
     "source_map": {"cwe": "CWE-540", "owasp": "A05:2021 Security Misconfiguration", "type": "Source Map Exposure"},
     "feature_flag": {"cwe": "CWE-200", "owasp": "A05:2021 Security Misconfiguration", "type": "Feature Flag Exposure"},
     "backup_file": {"cwe": "CWE-530", "owasp": "A05:2021 Security Misconfiguration", "type": "Backup File Exposure"},
-    # Database categories
     "database": {"cwe": "CWE-284", "owasp": "A05:2021 Security Misconfiguration", "type": "Database Exposure"},
     "redis_noauth": {"cwe": "CWE-306", "owasp": "A07:2021 Auth Failures", "type": "Redis No Authentication"},
     "mongodb_noauth": {"cwe": "CWE-306", "owasp": "A07:2021 Auth Failures", "type": "MongoDB No Authentication"},
     "elasticsearch_open": {"cwe": "CWE-306", "owasp": "A07:2021 Auth Failures", "type": "Elasticsearch Open Cluster"},
-    # Mobile categories
     "mobile_android": {"cwe": "CWE-919", "owasp": "M1:2024 Improper Credential Usage", "type": "Android Vulnerability"},
     "mobile_ios": {"cwe": "CWE-919", "owasp": "M1:2024 Improper Credential Usage", "type": "iOS Vulnerability"},
     "hardcoded_secret": {"cwe": "CWE-798", "owasp": "A07:2021 Auth Failures", "type": "Hardcoded Secret"},
     "exported_component": {"cwe": "CWE-926", "owasp": "M1:2024 Improper Credential Usage", "type": "Exported Android Component"},
     "insecure_webview": {"cwe": "CWE-749", "owasp": "M8:2024 Security Misconfiguration", "type": "Insecure WebView"},
-    # Business logic
     "business_logic": {"cwe": "CWE-840", "owasp": "A04:2021 Insecure Design", "type": "Business Logic Flaw"},
 }
 
-# Severity → Bounty Range (rough guide)
 BOUNTY_RANGES = {
     "Critical": "$3,000 - $50,000+",
     "High":     "$1,000 - $10,000",
@@ -101,7 +93,6 @@ BOUNTY_RANGES = {
     "Info":     "$0 - $100",
 }
 
-# CVSS vector templates
 CVSS_VECTORS = {
     "Critical": "AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
     "High":     "AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N",
@@ -112,7 +103,6 @@ CVSS_VECTORS = {
 
 
 class BountyReportGenerator:
-    """Generate bug bounty submission-ready reports."""
 
     def __init__(self, output_dir: str | Path = ".") -> None:
         self.output_dir = Path(output_dir)
@@ -123,7 +113,6 @@ class BountyReportGenerator:
         scan_result: dict[str, Any],
         output_format: str = "md",
     ) -> str:
-        """Generate a complete bug bounty report with all findings."""
         target = scan_result.get("target", "unknown")
         findings = scan_result.get("findings", [])
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -141,7 +130,6 @@ class BountyReportGenerator:
         self,
         scan_result: dict[str, Any],
     ) -> list[str]:
-        """Generate individual reports for each finding (for separate submissions)."""
         target = scan_result.get("target", "unknown")
         findings = scan_result.get("findings", [])
         paths = []
@@ -168,14 +156,11 @@ class BountyReportGenerator:
         timestamp: str,
         scan_result: dict,
     ) -> str:
-        """Generate full markdown report."""
-        # Sort by severity
         sorted_findings = sorted(
             findings,
             key=lambda f: self._severity_order(f.get("severity", "Info")),
         )
 
-        # Count by severity
         counts = {}
         for f in sorted_findings:
             sev = f.get("severity", "Info")
@@ -183,14 +168,12 @@ class BountyReportGenerator:
 
         report = f"""# 🛡️ Bug Bounty Security Report
 
-## Target: {target}
 **Scan Date:** {timestamp}  
 **Scanner:** VAPT CLI  
 **Findings:** {len(sorted_findings)} vulnerabilities  
 
 ---
 
-## Executive Summary
 
 | Severity | Count | Est. Bounty Range |
 |----------|-------|-------------------|
@@ -211,16 +194,13 @@ class BountyReportGenerator:
 
 ---
 
-## Findings Detail
 
 """
         for i, finding in enumerate(sorted_findings, 1):
             report += self._format_single_finding_md(target, finding, i)
             report += "\n---\n\n"
 
-        # Add metadata footer
         report += f"""
-## Scan Metadata
 
 - **Target:** {target}
 - **Scan ID:** {scan_result.get('scan_id', 'N/A')}
@@ -234,7 +214,6 @@ class BountyReportGenerator:
 *Generated by VAPT CLI — Professional Bug Bounty Scanner*
 """
 
-        # Save to file
         safe_target = target.replace("://", "_").replace("/", "_").replace(".", "_")[:50]
         filename = f"bounty_report_{safe_target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
         path = self.output_dir / filename
@@ -248,9 +227,7 @@ class BountyReportGenerator:
         finding: dict,
         index: int,
     ) -> str:
-        """Format a single finding as professional HackerOne-quality markdown."""
         severity = finding.get("severity", "Medium")
-        # Normalize severity capitalization
         severity = severity.capitalize() if severity else "Medium"
         title = finding.get("title", "Unnamed Vulnerability")
         vuln_id = finding.get("vuln_id", "N/A")
@@ -267,7 +244,6 @@ class BountyReportGenerator:
         parameter = finding.get("parameter", "")
         steps = finding.get("steps_to_reproduce", [])
 
-        # Use enriched CWE/CVSS from enrich_finding() if available, else fallback
         cwe = finding.get("cwe", "")
         if not cwe:
             refs = VULN_REFERENCES.get(category, {})
@@ -281,13 +257,10 @@ class BountyReportGenerator:
         cvss_vector = finding.get("cvss_vector", "") or CVSS_VECTORS.get(severity, "N/A")
         bounty_range = BOUNTY_RANGES.get(severity, "N/A")
 
-        # Use enriched description from enrich_finding(), else own lookup, else generic
         description = finding.get("description", "") or self._get_description(category, severity, url)
 
-        # Use enriched impact from enrich_finding(), else own lookup
         impact = finding.get("impact", "") or self._get_impact(category, severity)
 
-        # Severity emoji
         sev_emoji = {"Critical": "🔴", "High": "🟠", "Medium": "🟡", "Low": "🟢", "Info": "🔵"}.get(severity, "⚪")
 
         report = f"""### {sev_emoji} Finding #{index}: {title}
@@ -308,11 +281,9 @@ class BountyReportGenerator:
         report += f"""| **Confidence** | {confidence*100:.0f}% |
 | **Est. Bounty** | {bounty_range} |
 
-#### Description
 
 {description}
 
-#### Affected Endpoint
 
 ```
 {url}
@@ -340,11 +311,9 @@ class BountyReportGenerator:
         if steps and isinstance(steps, list) and len(steps) > 0:
             report += "#### Steps to Reproduce\n\n"
             for step in steps:
-                # Steps already have "1. ..." prefix from generate_steps()
                 if step.strip():
                     report += f"{step}\n"
             report += "\n"
-            # Add a copy-paste curl verification command
             report += self._generate_curl_verification(url, category, payload, parameter, finding)
         elif poc:
             report += f"""#### Steps to Reproduce / Proof of Concept
@@ -353,7 +322,6 @@ class BountyReportGenerator:
 
 """
         else:
-            # Last resort — generate context-aware steps
             report += "#### Steps to Reproduce\n\n"
             report += f"1. Navigate to `{url}`\n"
             if parameter and payload:
@@ -369,7 +337,6 @@ class BountyReportGenerator:
                 report += "2. Observe the response headers and body\n"
                 report += "3. Note the security issue described above\n"
             report += "\n"
-            # Add a copy-paste curl verification command
             report += self._generate_curl_verification(url, category, payload, parameter, finding)
 
 
@@ -434,7 +401,6 @@ class BountyReportGenerator:
     def _generate_curl_verification(
         self, url: str, category: str, payload: str, parameter: str, finding: dict
     ) -> str:
-        """Generate a copy-paste curl command so the user can verify the bug themselves."""
         import shlex
 
         block = "#### Quick Verification (copy-paste this command)\n\n"
@@ -507,7 +473,6 @@ class BountyReportGenerator:
             block += "> **What to look for:** A `Location:` header that redirects to the evil domain you specified.\n\n"
 
         else:
-            # Generic fallback
             block += f"```bash\ncurl -sD- '{url}' | head -50\n```\n\n"
             block += "> **What to look for:** Compare the response to the evidence described above. The bug is confirmed if you see the same anomalous behavior.\n\n"
 
@@ -521,7 +486,6 @@ class BountyReportGenerator:
         timestamp: str,
         scan_result: dict,
     ) -> str:
-        """Generate JSON report for programmatic consumption."""
         report = {
             "report_type": "bug_bounty",
             "target": target,
@@ -571,7 +535,6 @@ class BountyReportGenerator:
 
 
     def _get_description(self, category: str, severity: str, url: str) -> str:
-        """Generate vulnerability description based on category."""
         descriptions = {
             "sqli": f"A SQL Injection vulnerability was discovered at {url}. An attacker can inject malicious SQL queries through user input parameters, potentially extracting sensitive data from the database, modifying records, or executing administrative operations.",
             "sql_injection": f"A SQL Injection vulnerability was discovered at {url}. An attacker can manipulate database queries through unsanitized user input, leading to data theft, authentication bypass, or remote code execution.",
@@ -603,7 +566,6 @@ class BountyReportGenerator:
         )
 
     def _get_impact(self, category: str, severity: str) -> str:
-        """Generate impact description."""
         impacts = {
             "sqli": "- Full database access (read/write/delete)\n- Authentication bypass\n- Sensitive data theft (PII, credentials, financial data)\n- Potential Remote Code Execution via SQL features (e.g., INTO OUTFILE, xp_cmdshell)",
             "xss": "- Session hijacking via cookie theft\n- Account takeover\n- Phishing (inject fake login forms)\n- Keylogging victim's input\n- Defacement",
@@ -629,7 +591,6 @@ class BountyReportGenerator:
         )
 
     def _severity_order(self, severity: str) -> int:
-        """Sort order for severity (Critical first)."""
         order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
         return order.get(severity.lower() if severity else "info", 5)
 
@@ -641,13 +602,6 @@ class BountyReportGenerator:
         timestamp: str,
         scan_result: dict,
     ) -> str:
-        """
-        Generate individual FIELD: format reports for HackerOne submission.
-
-        This is the plain-text format preferred for direct HackerOne
-        report submission — each section is a FIELD: header followed by
-        the content, ready to copy-paste into the report form.
-        """
         sorted_findings = sorted(
             findings,
             key=lambda f: self._severity_order(f.get("severity", "Info")),
@@ -663,7 +617,6 @@ class BountyReportGenerator:
             path.write_text(content, encoding="utf-8")
             paths.append(str(path))
 
-        # Return the first path (most critical)
         return paths[0] if paths else ""
 
     def _format_single_field_report(
@@ -672,7 +625,6 @@ class BountyReportGenerator:
         finding: dict,
         index: int,
     ) -> str:
-        """Format a single finding as FIELD: format for HackerOne."""
         severity = (finding.get("severity") or "Medium").capitalize()
         title = finding.get("title", "Unnamed Vulnerability")
         vuln_id = finding.get("vuln_id", "N/A")
@@ -750,7 +702,6 @@ PROOF OF CONCEPT:
 {poc}
 """
 
-        # Verification command
         report += "\nVERIFICATION COMMAND:\n"
         if category in ("cors", "cors_misconfiguration"):
             report += f"curl -sI -H 'Origin: https://evil.com' '{url}' | grep -i 'access-control'\n"

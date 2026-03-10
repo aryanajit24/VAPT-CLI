@@ -1,14 +1,3 @@
-"""
-Tests for VAPT CLI Autonomous Hunt components.
-
-Tests the 6 new modules:
-  1. ScopeParser — program YAML loading, filtering
-  2. RateController — throttling, WAF backoff
-  3. DecisionEngine — escalation routing
-  4. DuplicateDetector — dupe probability scoring
-  5. ProofGenerator — PoC generation
-  6. HuntOrchestrator — end-to-end pipeline
-"""
 
 from __future__ import annotations
 
@@ -23,13 +12,7 @@ from unittest.mock import MagicMock, patch
 import yaml
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 1. Scope Parser
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestScopeParser(unittest.TestCase):
-    """Test program scope YAML parsing and filtering."""
 
     SAMPLE_YAML = textwrap.dedent("""\
         program:
@@ -196,7 +179,6 @@ class TestScopeParser(unittest.TestCase):
         self.assertIn("*.testcorp.com", prog.scope_config.in_scope)
 
     def test_minimal_yaml(self):
-        """Should load even with minimal fields."""
         minimal = textwrap.dedent("""\
             scope:
               in_scope:
@@ -209,13 +191,7 @@ class TestScopeParser(unittest.TestCase):
         os.unlink(path)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 2. Rate Controller
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestRateController(unittest.TestCase):
-    """Test rate limiting, profiles, and WAF backoff."""
 
     def test_default_profile(self):
         from vapt.engine.rate_controller import RateController
@@ -271,13 +247,7 @@ class TestRateController(unittest.TestCase):
         self.assertTrue(rc._rotate_ua)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 3. Decision Engine
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestDecisionEngine(unittest.TestCase):
-    """Test vulnerability escalation and routing logic."""
 
     def setUp(self):
         from vapt.engine.decision import DecisionEngine
@@ -342,7 +312,6 @@ class TestDecisionEngine(unittest.TestCase):
         self.assertIsInstance(summary, dict)
 
     def test_category_alias_matching(self):
-        """open_redirect should match as redirect category."""
         findings = [{"title": "Open Redirect", "category": "open_redirect", "severity": "medium"}]
         decisions = self.engine.decide(findings)
         d = decisions[0]
@@ -353,13 +322,7 @@ class TestDecisionEngine(unittest.TestCase):
         self.assertEqual(len(decisions), 0)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 4. Duplicate Detector
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestDuplicateDetector(unittest.TestCase):
-    """Test duplicate probability scoring."""
 
     def setUp(self):
         from vapt.engine.dedup import DuplicateDetector
@@ -395,7 +358,6 @@ class TestDuplicateDetector(unittest.TestCase):
         self.assertLess(few_score.probability, many_score.probability)
 
     def test_severity_discount(self):
-        """Critical findings should get severity discount."""
         from vapt.engine.dedup import DuplicateDetector
         detector = DuplicateDetector()
         crit = {"title": "RCE via SSTI", "category": "ssti", "severity": "critical"}
@@ -421,7 +383,6 @@ class TestDuplicateDetector(unittest.TestCase):
         self.assertTrue(len(worth) >= 1)
 
     def test_probability_clamped(self):
-        """Probability should never exceed 1.0 or go below 0.0."""
         finding = {"title": "Missing headers everywhere", "category": "missing_security_headers", "severity": "info"}
         score = self.detector.score(finding)
         self.assertLessEqual(score.probability, 1.0)
@@ -434,13 +395,7 @@ class TestDuplicateDetector(unittest.TestCase):
         self.assertIn(score.risk_level, ("low", "medium", "high", "very_high"))
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 5. Proof Generator
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestProofGenerator(unittest.TestCase):
-    """Test PoC generation for various vulnerability types."""
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
@@ -541,7 +496,6 @@ class TestProofGenerator(unittest.TestCase):
         self.assertEqual(len(all_artifacts), 2)
 
     def test_unknown_category_still_generates(self):
-        """Even unknown categories should produce at least a cURL and evidence file."""
         finding = {
             "title": "Something Unusual",
             "category": "custom_vuln",
@@ -553,13 +507,7 @@ class TestProofGenerator(unittest.TestCase):
         self.assertTrue(len(artifacts) > 0)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 6. Hunt Orchestrator
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestHuntOrchestrator(unittest.TestCase):
-    """Test the autonomous hunt pipeline."""
 
     SCOPE_YAML = textwrap.dedent("""\
         program:
@@ -589,7 +537,6 @@ class TestHuntOrchestrator(unittest.TestCase):
         return f.name
 
     def test_orchestrator_loads(self):
-        """Orchestrator should construct without errors."""
         path = self._write_scope()
         try:
             from vapt.engine.hunt import HuntOrchestrator
@@ -599,7 +546,6 @@ class TestHuntOrchestrator(unittest.TestCase):
             os.unlink(path)
 
     def test_phase1_understand(self):
-        """Phase 1 should return a strategy dict."""
         path = self._write_scope()
         try:
             from vapt.engine.hunt import HuntOrchestrator
@@ -613,7 +559,6 @@ class TestHuntOrchestrator(unittest.TestCase):
             os.unlink(path)
 
     def test_orchestrator_respects_testing_rules(self):
-        """Orchestrator should respect testing.no_destructive_testing."""
         path = self._write_scope()
         try:
             from vapt.engine.hunt import HuntOrchestrator
@@ -623,7 +568,6 @@ class TestHuntOrchestrator(unittest.TestCase):
             os.unlink(path)
 
     def test_orchestrator_session_has_cookies(self):
-        """Sessions should be configured with provided cookies."""
         path = self._write_scope()
         try:
             from vapt.engine.hunt import HuntOrchestrator
@@ -638,7 +582,6 @@ class TestHuntOrchestrator(unittest.TestCase):
             os.unlink(path)
 
     def test_orchestrator_session_has_bearer(self):
-        """Sessions should have Authorization header when bearer is provided."""
         path = self._write_scope()
         try:
             from vapt.engine.hunt import HuntOrchestrator
@@ -653,13 +596,11 @@ class TestHuntOrchestrator(unittest.TestCase):
             os.unlink(path)
 
     def test_missing_scope_file_raises(self):
-        """Should raise FileNotFoundError for missing scope."""
         from vapt.engine.hunt import HuntOrchestrator
         with self.assertRaises(FileNotFoundError):
             HuntOrchestrator(scope_file="/nonexistent.yaml", output_dir=tempfile.mkdtemp())
 
     def test_output_dir_created(self):
-        """Output directory should be auto-created."""
         path = self._write_scope()
         tmpdir = tempfile.mkdtemp()
         out = os.path.join(tmpdir, "deep", "nested", "output")
@@ -671,16 +612,9 @@ class TestHuntOrchestrator(unittest.TestCase):
             os.unlink(path)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Integration tests — cross-component
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestIntegration(unittest.TestCase):
-    """Test the pipeline components working together."""
 
     def test_decision_then_dedup(self):
-        """Decision engine output should feed into the duplicate detector."""
         from vapt.engine.decision import DecisionEngine
         from vapt.engine.dedup import DuplicateDetector
 
@@ -702,7 +636,6 @@ class TestIntegration(unittest.TestCase):
             self.assertIn(score.risk_level, ("low", "medium", "high", "very_high"))
 
     def test_dedup_then_proof(self):
-        """Deduplicated findings should generate PoCs."""
         from vapt.engine.dedup import DuplicateDetector
         from vapt.engine.proof import ProofGenerator
 
@@ -720,7 +653,6 @@ class TestIntegration(unittest.TestCase):
             self.assertTrue(len(artifacts) > 0)
 
     def test_scope_then_decision(self):
-        """Scope-filtered findings should be routed by decision engine."""
         from vapt.engine.decision import DecisionEngine
 
         engine = DecisionEngine(has_auth=True, excluded_categories={"missing_security_headers"})

@@ -1,4 +1,3 @@
-"""HTTP request smuggling and desync scanner."""
 
 from __future__ import annotations
 
@@ -14,7 +13,6 @@ import requests
 
 from vapt.utils.helpers import sanitize_target
 
-# TE Header Obfuscation Variants (for TE.TE testing)
 
 TE_OBFUSCATIONS = [
     "Transfer-Encoding: chunked",
@@ -39,7 +37,6 @@ TE_OBFUSCATIONS = [
 
 
 class SmuggleScanner:
-    """HTTP Request Smuggling detection via safe timing and differential analysis."""
 
     def __init__(
         self,
@@ -51,7 +48,6 @@ class SmuggleScanner:
         self.findings: list[dict] = []
 
     def run(self, target: str) -> dict[str, Any]:
-        """Execute HTTP request smuggling detection."""
         target = sanitize_target(target)
         if not target.startswith("http"):
             target = f"https://{target}"
@@ -62,29 +58,22 @@ class SmuggleScanner:
         use_ssl = parsed.scheme == "https"
         path = parsed.path or "/"
 
-        # Phase 1: Check server infrastructure
         infra = self._detect_infrastructure(target)
 
-        # Phase 2: CL.TE timing detection
         self._test_cl_te(host, port, use_ssl, path, target, infra)
 
-        # Phase 3: TE.CL timing detection
         self._test_te_cl(host, port, use_ssl, path, target, infra)
 
-        # Phase 4: TE.TE obfuscation testing
         self._test_te_te(host, port, use_ssl, path, target, infra)
 
-        # Phase 5: HTTP/2 downgrade checks
         self._test_h2_downgrade(target, infra)
 
-        # Phase 6: CRLF-based request splitting
         self._test_crlf_splitting(target)
 
         return {"findings": self.findings}
 
 
     def _detect_infrastructure(self, target: str) -> dict[str, Any]:
-        """Detect front-end/back-end infrastructure for smuggling context."""
         infra: dict[str, Any] = {
             "server": "unknown",
             "via": None,
@@ -101,7 +90,6 @@ class SmuggleScanner:
             infra["via"] = headers.get("Via")
             infra["cdn"] = None
 
-            # CDN detection
             cdn_headers = {
                 "cf-ray": "Cloudflare",
                 "x-cdn": "Generic CDN",
@@ -122,7 +110,6 @@ class SmuggleScanner:
             if infra["via"]:
                 infra["proxy"] = True
 
-            # HTTP/2 check
             try:
                 resp2 = self.session.get(target, timeout=self.timeout)
                 if hasattr(resp2, 'raw') and hasattr(resp2.raw, 'version'):
@@ -144,7 +131,6 @@ class SmuggleScanner:
         data: bytes,
         recv_timeout: float = 10.0,
     ) -> tuple[bytes, float]:
-        """Send raw HTTP request and measure response time."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(recv_timeout)
 
@@ -192,13 +178,6 @@ class SmuggleScanner:
         target: str,
         infra: dict,
     ) -> None:
-        """Detect CL.TE smuggling via timing differential.
-        
-        If front-end uses Content-Length and back-end uses Transfer-Encoding:
-        - Normal request: returns quickly
-        - Smuggling probe: back-end waits for more chunked data → timeout
-        """
-        # Baseline timing
         normal_req = (
             f"POST {path} HTTP/1.1\r\n"
             f"Host: {host}\r\n"
@@ -212,8 +191,6 @@ class SmuggleScanner:
         if baseline_time == 0:
             return
 
-        # CL.TE probe: Content-Length covers full body, but body has incomplete chunk
-        # If backend uses TE, it will wait for chunk terminator → delay
         probe = (
             f"POST {path} HTTP/1.1\r\n"
             f"Host: {host}\r\n"
@@ -228,7 +205,6 @@ class SmuggleScanner:
 
         _, probe_time = self._send_raw(host, port, use_ssl, probe, recv_timeout=15.0)
 
-        # If probe takes significantly longer, CL.TE desync likely
         time_diff = probe_time - baseline_time
 
         if time_diff > 5.0:
@@ -269,13 +245,6 @@ class SmuggleScanner:
         target: str,
         infra: dict,
     ) -> None:
-        """Detect TE.CL smuggling via timing differential.
-        
-        If front-end uses Transfer-Encoding and back-end uses Content-Length:
-        - Normal chunked request: returns quickly
-        - Smuggling probe: back-end sees extra data after CL boundary → delay
-        """
-        # Baseline
         normal_req = (
             f"POST {path} HTTP/1.1\r\n"
             f"Host: {host}\r\n"
@@ -289,8 +258,6 @@ class SmuggleScanner:
         if baseline_time == 0:
             return
 
-        # TE.CL probe: chunked encoding, but Content-Length shorter than body
-        # If backend uses CL, it reads partial body → confusion
         probe = (
             f"POST {path} HTTP/1.1\r\n"
             f"Host: {host}\r\n"
@@ -345,12 +312,6 @@ class SmuggleScanner:
         target: str,
         infra: dict,
     ) -> None:
-        """Test TE.TE desync via Transfer-Encoding header obfuscation.
-        
-        Both servers use TE, but one can be tricked into ignoring it
-        with header mutations.
-        """
-        # Baseline (normal chunked)
         normal_req = (
             f"POST {path} HTTP/1.1\r\n"
             f"Host: {host}\r\n"
@@ -369,7 +330,6 @@ class SmuggleScanner:
 
         normal_status = self._extract_status(resp_normal)
 
-        # Test each TE obfuscation
         for te_variant in TE_OBFUSCATIONS:
             probe = (
                 f"POST {path} HTTP/1.1\r\n"
@@ -392,7 +352,6 @@ class SmuggleScanner:
             probe_status = self._extract_status(resp_probe)
             time_diff = probe_time - baseline_time
 
-            # Detect anomaly: different status, or significant time difference
             if (probe_status != normal_status and probe_status not in (0, 400)) or time_diff > 5.0:
                 clean_te = te_variant.replace('\r\n', '\\r\\n').replace('\t', '\\t').replace('\x00', '\\x00')
                 self._add_finding(
@@ -418,16 +377,14 @@ class SmuggleScanner:
                     confidence=0.80,
                     poc=self._generate_smuggle_poc("TE.TE", target, host, path, time_diff, infra),
                 )
-                return  # One finding per target is enough
+                return
 
 
     def _test_h2_downgrade(self, target: str, infra: dict) -> None:
-        """Check for HTTP/2 to HTTP/1.1 downgrade smuggling vectors."""
         if not infra.get("proxy") and not infra.get("cdn"):
-            return  # Only relevant with proxies
+            return
 
         try:
-            # Test with various pseudo-headers that might pass through H2→H1 conversion
             smuggle_headers = {
                 "Transfer-Encoding": "chunked",
                 "Content-Length": "0",
@@ -444,7 +401,7 @@ class SmuggleScanner:
                 )
 
                 if resp.status_code in (200, 301, 302, 403) and header in ("X-Original-URL", "X-Rewrite-URL"):
-                    if resp.status_code != 404:  # Server processed the override
+                    if resp.status_code != 404:
                         try:
                             normal = self.session.get(target, timeout=self.timeout)
                             if resp.status_code != normal.status_code or len(resp.text) != len(normal.text):
@@ -475,17 +432,15 @@ class SmuggleScanner:
 
 
     def _test_crlf_splitting(self, target: str) -> None:
-        """Test for CRLF injection that enables request splitting."""
         crlf_payloads = [
             "%0d%0aX-Injected: true",
             "%0d%0a%0d%0aGET /admin HTTP/1.1%0d%0aHost: evil.com",
             "\r\nX-Injected: true",
             "\\r\\nX-Injected: true",
-            "%E5%98%8A%E5%98%8DX-Injected: true",  # Unicode CRLF
+            "%E5%98%8A%E5%98%8DX-Injected: true",
         ]
 
         try:
-            # Test in various positions
             test_points = [
                 (f"{target}/%0d%0aX-Injected: true", "URL path"),
                 (f"{target}?q=%0d%0aX-Injected: true", "Query parameter"),
@@ -526,7 +481,6 @@ class SmuggleScanner:
 
 
     def _extract_status(self, response: bytes) -> int:
-        """Extract HTTP status code from raw response."""
         try:
             first_line = response.split(b"\r\n")[0].decode()
             parts = first_line.split(" ")
@@ -543,21 +497,17 @@ class SmuggleScanner:
         time_diff: float,
         infra: dict,
     ) -> str:
-        """Generate detailed PoC for smuggling findings."""
         return f"""## HTTP Request Smuggling PoC ({attack_type})
 
-### Target
 - URL: {target}
 - Server: {infra.get('server', 'unknown')}
 - CDN/Proxy: {infra.get('cdn', 'none')}
 - Time differential: {time_diff:.2f}s
 
-### Detection Method
 Timing-based differential analysis:
 - Normal request completes quickly
 - Smuggling probe causes timeout (back-end waits for more data)
 
-### Raw Request (safe PoC)
 ```
 POST {path} HTTP/1.1
 Host: {host}
@@ -570,13 +520,11 @@ Z
 Q
 ```
 
-### Impact
 - Request smuggling can bypass WAFs and access controls
 - Poison web caches to serve malicious content to other users
 - Hijack other users' requests
 - Perform credential theft via request redirection
 
-### Python PoC (Safe — timing only)
 ```python
 import socket, ssl, time
 
@@ -612,7 +560,6 @@ def test_smuggle(host, port, path, use_ssl=True):
 test_smuggle("{host}", {"443" if infra.get("cdn") else "80"}, "{path}")
 ```
 
-### Remediation
 1. Reject requests with both Content-Length and Transfer-Encoding
 2. Use HTTP/2 end-to-end (eliminates this class entirely)
 3. Configure proxy to normalize ambiguous requests
@@ -620,7 +567,6 @@ test_smuggle("{host}", {"443" if infra.get("cdn") else "80"}, "{path}")
 """
 
     def _add_finding(self, **kwargs: Any) -> None:
-        """Add a deduplicated finding."""
         key = (kwargs.get("vuln_id"), kwargs.get("url"), kwargs.get("title", "")[:50])
         dedup = hashlib.md5(str(key).encode()).hexdigest()
 

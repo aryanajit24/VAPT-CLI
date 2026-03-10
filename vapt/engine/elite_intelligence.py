@@ -1,16 +1,11 @@
-"""Elite intelligence engine with attack chain detection and duplicate prediction."""
 
 from __future__ import annotations
 
 import re
-import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any
 from pathlib import Path
 
-
-# COMMONLY DUPLICATED VULNERABILITY PATTERNS
 
 COMMON_DUPLICATES = {
     "missing_security_headers": {
@@ -134,8 +129,6 @@ COMMON_DUPLICATES = {
     },
 }
 
-# HIGH-VALUE FINDING PATTERNS
-# Rarely duplicated — require manual analysis or auth
 
 HIGH_VALUE_PATTERNS = {
     "idor_financial": {
@@ -261,7 +254,6 @@ HIGH_VALUE_PATTERNS = {
     },
 }
 
-# POC COMPLETENESS REQUIREMENTS
 
 POC_REQUIREMENTS = {
     "cors": {
@@ -350,7 +342,6 @@ POC_REQUIREMENTS = {
     },
 }
 
-# SENSITIVE ENDPOINT PATTERNS
 
 SENSITIVE_ENDPOINT_PATTERNS = {
     "financial": {
@@ -414,7 +405,6 @@ SENSITIVE_ENDPOINT_PATTERNS = {
     },
 }
 
-# PROGRAM RESPONSE PATTERNS — based on H1/Bugcrowd triager behavior
 
 PROGRAM_RESPONSE_INTELLIGENCE = {
     "informative_patterns": [
@@ -447,25 +437,8 @@ PROGRAM_RESPONSE_INTELLIGENCE = {
 
 
 class EliteIntelligenceEngine:
-    """
-    The brain that transforms VAPT-CLI from a broad scanner into a targeted bounty hunter.
-    
-    Analyzes findings through multiple lenses:
-      1. Novelty Score (0.0 - 1.0): How likely is this finding to be novel?
-      2. Duplicate Risk (0.0 - 1.0): How likely is this already reported?
-      3. PoC Completeness (0.0 - 1.0): Is the proof of concept sufficient?
-      4. Chain Potential: Can this finding be combined with others for higher impact?
-      5. Submission Readiness: Is this finding ready for submission?
-    """
 
     def __init__(self, program_history_file: str | None = None) -> None:
-        """
-        Parameters
-        ----------
-        program_history_file : str, optional
-            Path to JSON file containing past submissions and their outcomes.
-            This enables learning from previous duplicate/informative responses.
-        """
         self.program_history: list[dict] = []
         self.suppressed_patterns: list[str] = []
         
@@ -473,7 +446,6 @@ class EliteIntelligenceEngine:
             self._load_program_history(program_history_file)
 
     def _load_program_history(self, filepath: str) -> None:
-        """Load past submission outcomes to avoid repeating mistakes."""
         try:
             with open(filepath) as f:
                 data = json.load(f)
@@ -483,18 +455,6 @@ class EliteIntelligenceEngine:
             pass
 
     def analyze(self, findings: list[dict], target_context: dict | None = None) -> list[dict]:
-        """
-        Run the full elite analysis pipeline on all findings.
-        
-        Returns findings enriched with:
-          - novelty_score (float 0-1)
-          - duplicate_risk (float 0-1)
-          - poc_completeness (float 0-1)
-          - chain_potential (list of potential chains)
-          - submission_readiness (str: ready, needs_work, skip)
-          - elite_recommendation (str: detailed recommendation)
-          - priority_rank (int: 1=highest priority to submit)
-        """
         target_context = target_context or {}
         
         for finding in findings:
@@ -510,25 +470,7 @@ class EliteIntelligenceEngine:
         return findings
 
     def _score_novelty(self, finding: dict) -> float:
-        """
-        Score how novel/unique a finding is likely to be.
-        
-        Higher score = more likely to be novel (not yet reported).
-        
-        Factors that INCREASE novelty:
-          - Requires authentication (fewer researchers test these)
-          - Business logic flaw (scanners can't find these)
-          - Complex attack chain (requires manual analysis)
-          - Non-obvious endpoint (not /login, /admin, etc.)
-          - Race condition on specific business flow
-          
-        Factors that DECREASE novelty:
-          - Surface-level finding (headers, CORS, info disclosure)
-          - Unauthenticated discovery
-          - Common endpoint (/actuator, /health, /robots.txt)
-          - Pattern matches known common duplicates
-        """
-        score = 0.50  # Start at neutral
+        score = 0.50
         
         category = finding.get("category", "").lower()
         title = finding.get("title", "").lower()
@@ -541,7 +483,7 @@ class EliteIntelligenceEngine:
             for indicator in config["indicators"]:
                 if re.search(indicator, search_text):
                     score += config["novelty_bonus"]
-                    break  # Only add bonus once per pattern category
+                    break
         
         for dup_name, config in COMMON_DUPLICATES.items():
             for pattern in config["patterns"]:
@@ -550,9 +492,9 @@ class EliteIntelligenceEngine:
                     break
         
         if finding.get("requires_auth") or finding.get("authenticated"):
-            score += 0.25  # Authenticated findings are rarer
+            score += 0.25
         else:
-            score -= 0.10  # Unauthenticated = more competition
+            score -= 0.10
         
         for ep_type, config in SENSITIVE_ENDPOINT_PATTERNS.items():
             for pattern in config["patterns"]:
@@ -565,21 +507,16 @@ class EliteIntelligenceEngine:
         
         steps = finding.get("steps_to_reproduce", [])
         if isinstance(steps, list) and len(steps) > 3:
-            score += 0.10  # Multi-step findings are harder to find
+            score += 0.10
         
         for pattern in self.suppressed_patterns:
             if re.search(pattern, search_text, re.IGNORECASE):
-                score -= 0.40  # Previously rejected pattern
+                score -= 0.40
         
         return max(0.0, min(1.0, score))
 
     def _assess_duplicate_risk(self, finding: dict) -> float:
-        """
-        Estimate the probability that this finding has already been reported.
-        
-        Returns 0.0 (unique) to 1.0 (certainly duplicate).
-        """
-        risk = 0.20  # Base risk (20% of everything has been found)
+        risk = 0.20
         
         category = finding.get("category", "").lower()
         title = finding.get("title", "").lower()
@@ -616,11 +553,6 @@ class EliteIntelligenceEngine:
         return max(0.0, min(1.0, risk))
 
     def _check_poc_completeness(self, finding: dict) -> float:
-        """
-        Verify that the proof of concept is sufficient for submission.
-        
-        Returns 0.0 (no PoC) to 1.0 (complete, working PoC).
-        """
         score = 0.0
         category = finding.get("category", "").lower()
         
@@ -631,7 +563,6 @@ class EliteIntelligenceEngine:
                 break
         
         if not poc_req:
-            # No specific requirements — check general PoC presence
             evidence = finding.get("evidence", {})
             if evidence:
                 score += 0.30
@@ -674,15 +605,9 @@ class EliteIntelligenceEngine:
         return max(0.0, min(1.0, score))
 
     def _find_chain_potential(self, finding: dict, all_findings: list[dict]) -> list[dict]:
-        """
-        Identify potential attack chains that combine this finding with others.
-        
-        Multi-step chains are MUCH more likely to be novel and high-impact.
-        """
         chains = []
         category = finding.get("category", "").lower()
         
-        # Chain: CORS + sensitive endpoint → data exfiltration
         if "cors" in category:
             sensitive_eps = [
                 f for f in all_findings
@@ -698,7 +623,6 @@ class EliteIntelligenceEngine:
                     "required_poc": "HTML page demonstrating data theft from authenticated user",
                 })
         
-        # Chain: Open Redirect + OAuth → Token Theft
         if "redirect" in category:
             oauth_findings = [f for f in all_findings if "oauth" in f.get("category", "").lower()]
             if oauth_findings:
@@ -709,7 +633,6 @@ class EliteIntelligenceEngine:
                     "required_poc": "URL that redirects OAuth callback to attacker server",
                 })
         
-        # Chain: XSS + Session → Account Takeover
         if "xss" in category:
             chains.append({
                 "chain": "XSS → Account Takeover",
@@ -718,7 +641,6 @@ class EliteIntelligenceEngine:
                 "required_poc": "XSS payload that exfiltrates auth cookies to attacker server",
             })
         
-        # Chain: SSRF + Cloud Metadata → Cloud Credential Theft
         if "ssrf" in category:
             chains.append({
                 "chain": "SSRF → Cloud Credential Theft",
@@ -727,7 +649,6 @@ class EliteIntelligenceEngine:
                 "required_poc": "SSRF payload reaching 169.254.169.254 or cloud metadata URL",
             })
         
-        # Chain: IDOR + Financial Endpoint → Unauthorized Financial Access
         if "idor" in category:
             financial_eps = [
                 f for f in all_findings
@@ -742,7 +663,6 @@ class EliteIntelligenceEngine:
                     "required_poc": "Two accounts demonstrating cross-access to financial data",
                 })
         
-        # Chain: Info Disclosure + Internal URL → SSRF pivot
         if "info" in category or "disclosure" in category:
             ssrf_findings = [f for f in all_findings if "ssrf" in f.get("category", "").lower()]
             if ssrf_findings:
@@ -756,14 +676,6 @@ class EliteIntelligenceEngine:
         return chains
 
     def _assess_submission_readiness(self, finding: dict) -> str:
-        """
-        Determine if a finding is ready for submission.
-        
-        Returns:
-          - "ready": High novelty, low duplicate risk, complete PoC → SUBMIT
-          - "needs_work": Good finding but needs better PoC or chain → IMPROVE
-          - "skip": High duplicate risk or low impact → DON'T SUBMIT
-        """
         novelty = finding.get("novelty_score", 0)
         dup_risk = finding.get("duplicate_risk", 1)
         poc = finding.get("poc_completeness", 0)
@@ -785,7 +697,6 @@ class EliteIntelligenceEngine:
         if novelty >= 0.50 and poc < 0.50:
             return "needs_work"
         
-        # Critical severity overrides moderate dup risk
         if severity == "critical" and dup_risk < 0.70:
             return "needs_work"
         
@@ -795,7 +706,6 @@ class EliteIntelligenceEngine:
         return "needs_work"
 
     def _generate_recommendation(self, finding: dict) -> str:
-        """Generate a detailed recommendation for the finding."""
         readiness = finding.get("submission_readiness", "skip")
         novelty = finding.get("novelty_score", 0)
         dup_risk = finding.get("duplicate_risk", 0)
@@ -833,12 +743,6 @@ class EliteIntelligenceEngine:
         return "\n".join(parts)
 
     def _rank_findings(self, findings: list[dict]) -> list[dict]:
-        """
-        Rank all findings by priority for submission.
-        
-        Priority formula:
-          score = (novelty × 3) + (1 - duplicate_risk) × 2 + poc_completeness + severity_weight + chain_bonus
-        """
         severity_weights = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
         
         for finding in findings:
@@ -865,17 +769,6 @@ class EliteIntelligenceEngine:
         return findings
 
     def generate_elite_summary(self, findings: list[dict]) -> dict:
-        """
-        Generate an executive summary of the elite analysis.
-        
-        Returns a dict with:
-          - total_findings: int
-          - ready_to_submit: int
-          - needs_work: int
-          - skipped: int
-          - top_findings: list (top 5 by priority)
-          - recommendations: list of overall recommendations
-        """
         ready = [f for f in findings if f.get("submission_readiness") == "ready"]
         needs_work = [f for f in findings if f.get("submission_readiness") == "needs_work"]
         skipped = [f for f in findings if f.get("submission_readiness") == "skip"]
@@ -920,7 +813,6 @@ class EliteIntelligenceEngine:
         }
 
     def save_program_history(self, filepath: str, submissions: list[dict]) -> None:
-        """Save submission history for future duplicate avoidance."""
         data = {
             "submissions": submissions,
             "suppressed_patterns": self.suppressed_patterns,
@@ -931,6 +823,5 @@ class EliteIntelligenceEngine:
             json.dump(data, f, indent=2)
 
     def add_suppressed_pattern(self, pattern: str) -> None:
-        """Add a pattern to suppress (e.g., after getting a duplicate response)."""
         if pattern not in self.suppressed_patterns:
             self.suppressed_patterns.append(pattern)

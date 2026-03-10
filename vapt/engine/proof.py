@@ -1,18 +1,9 @@
-"""Proof generator — creates browser-based PoCs, screenshots, and evidence bundles.
-
-For each confirmed finding, generates:
-  - Standalone HTML exploit page (for CORS, XSS, CSRF)
-  - cURL reproduction command
-  - Screenshot of the vulnerability (via Playwright if available)
-  - Request/response evidence file
-"""
 
 from __future__ import annotations
 
 import html
 import json
 import textwrap
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,18 +18,12 @@ except ImportError:
 
 
 class ProofGenerator:
-    """Generate proof-of-concept artifacts for vulnerability findings."""
 
     def __init__(self, output_dir: str = "./vapt-reports/proofs") -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def generate(self, finding: dict) -> dict[str, str]:
-        """Generate all applicable proof artifacts for a finding.
-
-        Returns a dict mapping artifact type to file path:
-            {"curl": "path/to/curl.sh", "poc_html": "path/to/poc.html", ...}
-        """
         cat = finding.get("category", "").lower()
         title_safe = self._safe_filename(finding.get("title", "finding"))
         artifacts: dict[str, str] = {}
@@ -141,7 +126,6 @@ class ProofGenerator:
         return "\n".join(lines)
 
     def _generate_poc_html(self, finding: dict) -> str | None:
-        """Generate a standalone HTML PoC file based on vulnerability category."""
         cat = finding.get("category", "").lower()
         url = finding.get("url", "")
         title = html.escape(finding.get("title", "PoC"))

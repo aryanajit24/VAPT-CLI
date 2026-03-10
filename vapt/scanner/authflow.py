@@ -1,4 +1,3 @@
-"""Authentication flow analyzer for session management vulnerabilities."""
 
 from __future__ import annotations
 
@@ -8,7 +7,7 @@ import re
 import time
 import uuid
 from typing import Any
-from urllib.parse import urljoin, urlparse, urlencode
+from urllib.parse import urljoin, urlparse
 
 import requests
 from requests.exceptions import RequestException
@@ -17,12 +16,6 @@ from vapt.utils.helpers import sanitize_target
 
 
 class AuthFlowScanner:
-    """
-    Scanner that tests authenticated application flows.
-    
-    Creates and manages test accounts, then systematically tests
-    all authenticated functionality for authorization flaws.
-    """
 
     def __init__(
         self,
@@ -33,8 +26,8 @@ class AuthFlowScanner:
         self.safety_config = safety_config or {}
         self.findings: list[dict] = []
         
-        self.session_a: requests.Session | None = None  # Primary test user
-        self.session_b: requests.Session | None = None  # Secondary test user (for IDOR)
+        self.session_a: requests.Session | None = None
+        self.session_b: requests.Session | None = None
         self.unauthenticated: requests.Session = requests.Session()
         self.unauthenticated.headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
         
@@ -50,18 +43,6 @@ class AuthFlowScanner:
         label: str = "A",
         account_info: dict | None = None,
     ) -> None:
-        """
-        Set up an authenticated session to use for testing.
-        
-        Parameters
-        ----------
-        session : requests.Session
-            Pre-authenticated session (with cookies/tokens).
-        label : str
-            "A" for primary user, "B" for secondary user.
-        account_info : dict, optional
-            Info about the account (email, user_id, etc).
-        """
         if label == "A":
             self.session_a = session
             self.account_a = account_info or {}
@@ -78,11 +59,6 @@ class AuthFlowScanner:
         password_b: str | None = None,
         custom_headers: dict | None = None,
     ) -> bool:
-        """
-        Create authenticated sessions from login credentials.
-        
-        Returns True if at least session A was created successfully.
-        """
         self.session_a = self._login(login_url, email_a, password_a, custom_headers)
         if not self.session_a:
             return False
@@ -103,7 +79,6 @@ class AuthFlowScanner:
         password: str,
         custom_headers: dict | None = None,
     ) -> requests.Session | None:
-        """Attempt login and return authenticated session."""
         session = requests.Session()
         session.headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
         if custom_headers:
@@ -145,7 +120,6 @@ class AuthFlowScanner:
                     if session.cookies:
                         return session
                 
-                # form-based logins often redirect on success
                 if resp.status_code in (301, 302, 303):
                     return session
                     
@@ -159,16 +133,6 @@ class AuthFlowScanner:
         target: str,
         endpoints: list[str] | None = None,
     ) -> dict[str, Any]:
-        """
-        Run the full authenticated flow scan.
-        
-        Parameters
-        ----------
-        target : str
-            Base URL (e.g., https://api.example.com)
-        endpoints : list[str], optional
-            Pre-discovered endpoints from Deep JS Recon.
-        """
         target = sanitize_target(target)
         started = time.time()
         
@@ -205,14 +169,6 @@ class AuthFlowScanner:
         }
 
     def _map_auth_surface(self, target: str, known_endpoints: list[str]) -> None:
-        """
-        Map which endpoints require authentication and which don't.
-        
-        For each endpoint, test with:
-          1. No session → should return 401/403
-          2. User A session → should return 200
-          3. User B session → compare with User A (IDOR check)
-        """
         endpoints_to_test = list(known_endpoints)
         
         auth_paths = [
@@ -295,15 +251,6 @@ class AuthFlowScanner:
                 continue
 
     def _test_idor(self, target: str) -> None:
-        """
-        Test for IDOR using two authenticated sessions.
-        
-        For each authenticated endpoint:
-          1. User A accesses their own data
-          2. Extract resource identifiers (IDs, UUIDs)
-          3. User B attempts to access User A's resources
-          4. If User B succeeds → IDOR confirmed
-        """
         if not self.session_b:
             return
         
@@ -320,7 +267,6 @@ class AuthFlowScanner:
                     continue
                 
                 if resp_a.text == resp_b.text and len(resp_a.text) > 50:
-                    # Could be shared/public data — check for user-specific fields
                     try:
                         data_a = resp_a.json()
                         data_b = resp_b.json()
@@ -405,7 +351,6 @@ class AuthFlowScanner:
                 continue
 
     def _extract_resource_ids(self, response_text: str) -> list[tuple[str, str]]:
-        """Extract resource identifiers from a JSON response."""
         ids = []
         
         patterns = [
@@ -426,13 +371,12 @@ class AuthFlowScanner:
         
         for pattern, id_type in patterns:
             matches = re.findall(pattern, response_text)
-            for match in matches[:3]:  # Limit to 3 per type
+            for match in matches[:3]:
                 ids.append((id_type, match))
         
         return ids
 
     def _build_id_urls(self, base_endpoint: str, id_type: str, id_value: str) -> list[str]:
-        """Build URLs with resource IDs for IDOR testing."""
         urls = []
         
         urls.append(f"{base_endpoint.rstrip('/')}/{id_value}")
@@ -443,14 +387,6 @@ class AuthFlowScanner:
         return urls
 
     def _test_privilege_escalation(self, target: str) -> None:
-        """
-        Test for vertical privilege escalation.
-        
-        Attempts to:
-          1. Access admin-only endpoints with regular user session
-          2. Modify role/permissions via API
-          3. Access premium features without subscription
-        """
         admin_paths = [
             "/api/admin", "/api/v1/admin",
             "/api/admin/users", "/api/v1/admin/users",
@@ -502,7 +438,6 @@ class AuthFlowScanner:
                 continue
 
     def _test_session_management(self, target: str) -> None:
-        """Test session management vulnerabilities."""
         if not self.session_a:
             return
         
@@ -543,11 +478,6 @@ class AuthFlowScanner:
                 continue
 
     def _test_token_handling(self, target: str) -> None:
-        """
-        Test JWT/token-specific vulnerabilities.
-        
-        Tests: algorithm confusion, token forgery, expired token acceptance.
-        """
         if not self.session_a:
             return
         
@@ -559,7 +489,7 @@ class AuthFlowScanner:
         
         parts = token.split(".")
         if len(parts) != 3:
-            return  # Not a JWT
+            return
         
         import base64
         
@@ -637,11 +567,6 @@ class AuthFlowScanner:
                 })
 
     def _test_method_access_control(self, target: str) -> None:
-        """
-        Test if different HTTP methods bypass access control.
-        
-        Some endpoints only check auth for GET but not POST/PUT/DELETE.
-        """
         methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
         
         for ep_info in self.auth_endpoints[:10]:

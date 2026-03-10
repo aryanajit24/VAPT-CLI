@@ -181,11 +181,10 @@ SKIP_DIRS = {
     ".nuxt", "coverage", ".pytest_cache", ".cache",
 }
 
-MAX_FILE_SIZE = 2_000_000  # 2 MB
+MAX_FILE_SIZE = 2_000_000
 
 
 class CodeScanner:
-    """Static application security testing (SAST) and secret detection for source code."""
 
     def __init__(self) -> None:
         self.findings: list[dict] = []

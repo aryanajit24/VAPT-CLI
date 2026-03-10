@@ -1,4 +1,3 @@
-"""REST/GraphQL API security scanner."""
 
 from __future__ import annotations
 
@@ -67,7 +66,6 @@ COMMON_API_PATHS = [
     "/api/v1/logs", "/api/logs",
     "/api/v1/events", "/api/events",
     "/api/v1/webhooks", "/api/webhooks",
-    # Spring Boot actuator
     "/actuator", "/actuator/env", "/actuator/health",
     "/actuator/beans", "/actuator/mappings", "/actuator/heapdump",
     "/actuator/logfile", "/actuator/metrics",
@@ -103,7 +101,6 @@ WEAK_JWT_SECRETS = [
 
 
 class APIScanner:
-    """Full bug-bounty-style API vulnerability scanner."""
 
     def __init__(self, timeout: int = 10, safety_config: dict | None = None, session=None) -> None:
         self.timeout = timeout
@@ -112,12 +109,11 @@ class APIScanner:
             self._raw_session = session
         else:
             self._raw_session = requests.Session()
-            self._raw_session.verify = False  # noqa: S501
+            self._raw_session.verify = False
         from vapt.engine.evidence import EvidenceCollector
         self.session = EvidenceCollector(self._raw_session, timeout)
 
     def run(self, target: str, token: str | None = None) -> dict[str, Any]:
-        """Discover and attack API endpoints on the target."""
         target = sanitize_target(target)
         base_url = target if target.startswith(("http://", "https://")) else f"https://{target}"
 
@@ -147,14 +143,12 @@ class APIScanner:
         results["findings"] += self._test_unauthed_admin(base_url)
         results["findings"] += self._test_cors(base_url)
 
-        # SAFETY GATED — rapid-fire requests may trigger WAF / ban
         if not self.safety_config.get("skip_rate_limit_test"):
             results["findings"] += self._test_rate_limiting(base_url)
 
         results["findings"] += self._test_graphql(base_url)
         results["findings"] += self._test_jwt(token)
 
-        # SAFETY GATED — writes admin=true, balance=999999 to endpoints
         if not self.safety_config.get("skip_file_write"):
             results["findings"] += self._test_mass_assignment(base_url, all_endpoints)
 
@@ -170,7 +164,6 @@ class APIScanner:
 
 
     def _discover_endpoints(self, base_url: str) -> list[str]:
-        """Probe common API paths and return responsive ones."""
         found = []
         for path in COMMON_API_PATHS:
             url = base_url.rstrip("/") + path
@@ -183,7 +176,6 @@ class APIScanner:
         return found
 
     def _parse_api_spec(self, base_url: str) -> list[str]:
-        """Try to fetch Swagger/OpenAPI spec and extract all endpoint paths."""
         spec_urls = [
             "/swagger.json", "/openapi.json", "/api-docs",
             "/v1/api-docs", "/v2/api-docs", "/api/swagger.json",
@@ -195,7 +187,6 @@ class APIScanner:
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp.status_code == 200:
                     data = resp.json()
-                    # OpenAPI 3.x and Swagger 2.x both use "paths"
                     for path in data.get("paths", {}):
                         paths.append(path)
             except Exception:
@@ -204,7 +195,6 @@ class APIScanner:
 
 
     def _test_data_exposure(self, base_url: str, path: str) -> list[dict]:
-        """Check a discovered endpoint for sensitive field exposure."""
         url = base_url.rstrip("/") + path
         try:
             resp = self.session.get(url, timeout=self.timeout)
@@ -225,7 +215,6 @@ class APIScanner:
         return []
 
     def _test_bola(self, base_url: str, path: str) -> list[dict]:
-        """Test for Broken Object Level Authorization by trying alternate IDs."""
         if not any(word in path for word in ["user", "order", "item", "product", "account", "file", "message"]):
             return []
         findings = []
@@ -254,7 +243,6 @@ class APIScanner:
         return findings
 
     def _test_verb_tampering(self, base_url: str, path: str) -> list[dict]:
-        """Try HTTP methods the API probably shouldn't allow."""
         findings = []
         url = base_url.rstrip("/") + path
         for method in ("DELETE", "PUT", "PATCH"):
@@ -273,7 +261,6 @@ class APIScanner:
         return findings
 
     def _test_verbose_errors(self, base_url: str, path: str) -> list[dict]:
-        """Send malformed requests and check for verbose error messages."""
         url = base_url.rstrip("/") + path
         error_patterns = re.compile(
             r"(stack trace|traceback|at line \d|exception in thread"
@@ -301,7 +288,6 @@ class APIScanner:
 
 
     def _test_unauthed_admin(self, base_url: str) -> list[dict]:
-        """Try admin endpoints without any authentication."""
         findings = []
         admin_paths = [
             "/api/admin", "/api/v1/admin", "/api/v2/admin",
@@ -328,7 +314,6 @@ class APIScanner:
         return findings
 
     def _test_cors(self, base_url: str) -> list[dict]:
-        """Check for overly permissive CORS policy."""
         findings = []
         try:
             resp = self.session.options(
@@ -359,7 +344,6 @@ class APIScanner:
         return findings
 
     def _test_rate_limiting(self, base_url: str) -> list[dict]:
-        """Send 15 rapid requests and check if any get throttled (429)."""
         paths_to_test = ["/api/v1/users", "/api/users", "/api/v1/login", "/api/login"]
         for path in paths_to_test:
             url = base_url.rstrip("/") + path
@@ -381,7 +365,6 @@ class APIScanner:
         return []
 
     def _test_graphql(self, base_url: str) -> list[dict]:
-        """Test GraphQL endpoints for introspection and injection."""
         findings = []
         gql_paths = ["/graphql", "/api/graphql", "/v1/graphql", "/graphiql", "/gql"]
         for path in gql_paths:
@@ -430,7 +413,6 @@ class APIScanner:
         return findings
 
     def _test_jwt(self, token: str | None) -> list[dict]:
-        """Test JWT for algorithm confusion and weak secrets."""
         if not token:
             return []
 
@@ -489,7 +471,6 @@ class APIScanner:
         return findings
 
     def _test_mass_assignment(self, base_url: str, endpoints: list[str]) -> list[dict]:
-        """Attempt to set privileged fields via POST/PUT (mass assignment)."""
         findings = []
         for path in endpoints:
             if not any(w in path for w in ["user", "profile", "account", "register", "signup"]):
@@ -521,7 +502,6 @@ class APIScanner:
 
 
     def _find_sensitive_fields(self, data: Any) -> list[str]:
-        """Recursively find sensitive field names in a JSON object."""
         found: set[str] = set()
         if isinstance(data, dict):
             for key, value in data.items():

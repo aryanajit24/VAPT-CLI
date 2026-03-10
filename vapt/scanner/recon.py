@@ -1,9 +1,7 @@
-"""Reconnaissance scanner for subdomain and asset discovery."""
 
 from __future__ import annotations
 
 import re
-import socket
 from typing import Any
 
 import dns.resolver
@@ -13,14 +11,12 @@ from vapt.utils.helpers import resolve_host, sanitize_target
 
 
 class ReconScanner:
-    """Gather passive and lightweight-active intel on a target."""
 
     def __init__(self, timeout: int = 10) -> None:
         self.timeout = timeout
 
 
     def run(self, target: str) -> dict[str, Any]:
-        """Execute every recon module and return a combined report."""
         target = sanitize_target(target)
         results: dict[str, Any] = {
             "target": target,
@@ -41,19 +37,16 @@ class ReconScanner:
         results["subdomains"] = self._subdomain_bruteforce(target)
         results["technologies"] = self._detect_technologies(target)
 
-        # API-powered modules — silently skip if keys aren't configured.
         results["ct_subdomains"] = self._crtsh_subdomains(target)
         results["shodan"] = self._shodan_lookup(target)
         results["securitytrails"] = self._securitytrails_subdomains(target)
         results["emails"] = self._hunterio_emails(target)
 
-        # Merge crt.sh subs into the master list (deduplicated).
         all_subs = set(results["subdomains"]) | set(results["ct_subdomains"])
         if results["securitytrails"].get("subdomains"):
             all_subs |= set(results["securitytrails"]["subdomains"])
         results["subdomains"] = sorted(all_subs)
 
-        # If Shodan shows a lot of open ports, flag it.
         if results["shodan"].get("ports") and len(results["shodan"]["ports"]) > 10:
             results["findings"].append({
                 "vuln_id": "OSINT-001",
@@ -68,7 +61,6 @@ class ReconScanner:
 
 
     def _dns_enum(self, host: str) -> dict[str, Any]:
-        """Pull common DNS record types and return them as a tidy dict."""
         record_types = ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA"]
         dns_info: dict[str, list[str]] = {}
 
@@ -88,9 +80,8 @@ class ReconScanner:
 
 
     def _whois_lookup(self, host: str) -> dict[str, Any]:
-        """Grab registrar, creation/expiry dates, and nameservers via WHOIS."""
         try:
-            import whois  # type: ignore
+            import whois
 
             w = whois.whois(host)
             return {
@@ -105,7 +96,6 @@ class ReconScanner:
 
 
     def _subdomain_bruteforce(self, host: str) -> list[str]:
-        """Try a short wordlist of common subdomains and keep the ones that resolve."""
         wordlist = [
             "www", "mail", "ftp", "admin", "vpn", "portal", "api",
             "dev", "staging", "test", "blog", "shop", "remote", "cdn",
@@ -121,37 +111,30 @@ class ReconScanner:
 
 
     def _detect_technologies(self, host: str) -> list[str]:
-        """Sniff HTTP headers for Server, X-Powered-By, and other tell-tales."""
         techs: list[str] = []
         for scheme in ("https", "http"):
             try:
                 url = f"{scheme}://{host}"
                 resp = requests.get(
-                    url, timeout=self.timeout, allow_redirects=True, verify=False,  # noqa: S501
+                    url, timeout=self.timeout, allow_redirects=True, verify=False,
                 )
                 for hdr in ("Server", "X-Powered-By", "X-AspNet-Version", "X-Generator"):
                     val = resp.headers.get(hdr, "")
                     if val:
                         techs.append(f"{hdr}: {val}")
-                break  # one successful scheme is enough
+                break
             except requests.RequestException:
                 continue
         return techs
 
 
     def _crtsh_subdomains(self, host: str) -> list[str]:
-        """
-        Query crt.sh for subdomains exposed via Certificate Transparency logs.
-
-        This is free and needs no API key — a great passive recon source.
-        """
         url = f"https://crt.sh/?q=%25.{host}&output=json"
         try:
             resp = requests.get(url, timeout=self.timeout)
             if resp.status_code != 200:
                 return []
             entries = resp.json()
-            # crt.sh returns common_name and name_value — collect both
             names: set[str] = set()
             for entry in entries:
                 for field in ("common_name", "name_value"):
@@ -166,17 +149,11 @@ class ReconScanner:
 
 
     def _shodan_lookup(self, target: str) -> dict[str, Any]:
-        """
-        Look up a target on Shodan to get open ports, vulns, and metadata.
-
-        Requires config key: shodan_api_key
-        """
         api_key = self._load_api_key("shodan_api_key")
         if not api_key:
             return {}
 
         try:
-            # Resolve hostname to IP first — Shodan indexes IPs.
             ips = resolve_host(target, timeout=float(self.timeout))
             ip = ips[0] if ips else target
 
@@ -201,11 +178,6 @@ class ReconScanner:
 
 
     def _securitytrails_subdomains(self, target: str) -> dict[str, Any]:
-        """
-        Get subdomains from SecurityTrails API.
-
-        Requires config key: securitytrails_api_key
-        """
         api_key = self._load_api_key("securitytrails_api_key")
         if not api_key:
             return {}
@@ -224,11 +196,6 @@ class ReconScanner:
 
 
     def _hunterio_emails(self, target: str) -> list[dict[str, str]]:
-        """
-        Harvest publicly available email addresses for a domain via Hunter.io.
-
-        Requires config key: hunterio_api_key
-        """
         api_key = self._load_api_key("hunterio_api_key")
         if not api_key:
             return []
@@ -250,11 +217,6 @@ class ReconScanner:
 
     @staticmethod
     def _load_api_key(key_name: str) -> str | None:
-        """
-        Try to load an API key from the encrypted config store.
-
-        Returns None (silently) if the key isn't set — we just skip that module.
-        """
         try:
             from vapt.config import ConfigManager
             cfg = ConfigManager()

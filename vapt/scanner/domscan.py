@@ -1,4 +1,3 @@
-"""DOM-based vulnerability scanner with JavaScript analysis."""
 
 from __future__ import annotations
 
@@ -7,7 +6,7 @@ import json
 import hashlib
 from collections import deque
 from typing import Any
-from urllib.parse import urljoin, urlparse, urlencode
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -20,7 +19,7 @@ DOM_XSS_SINKS = [
     r"\.insertAdjacentHTML\s*\(",
     r"document\.write\s*\(",
     r"document\.writeln\s*\(",
-    r"\.html\s*\(",  # jQuery .html()
+    r"\.html\s*\(",
     r"\.href\s*=",
     r"\.src\s*=",
     r"\.action\s*=",
@@ -60,12 +59,12 @@ DOM_XSS_SOURCES = [
     r"window\.name",
     r"window\.location",
     r"\.getParameter\s*\(",
-    r"\.get\(\s*['\"]",  # URLSearchParams.get()
+    r"\.get\(\s*['\"]",
     r"URLSearchParams",
     r"\.split\s*\(\s*['\"][#?&]",
     r"\.substring\s*\(\s*\d+",
     r"postMessage",
-    r"\.data\b",  # event.data in message handler
+    r"\.data\b",
     r"localStorage\.getItem",
     r"sessionStorage\.getItem",
     r"\.value\b",
@@ -135,7 +134,6 @@ SPA_ROUTE_PATTERNS = [
 
 
 class DOMScanner:
-    """Client-side vulnerability scanner — finds DOM XSS, secrets, and client-side bugs."""
 
     def __init__(
         self,
@@ -152,7 +150,6 @@ class DOMScanner:
         self._js_cache: dict[str, str] = {}
 
     def run(self, target: str) -> dict[str, Any]:
-        """Run full DOM/client-side scan."""
         target = sanitize_target(target)
         if not target.startswith("http"):
             target = f"https://{target}"
@@ -162,7 +159,6 @@ class DOMScanner:
 
 
     def _crawl_and_analyze(self, start_url: str) -> None:
-        """Crawl the site and analyze each page's JavaScript."""
         queue: deque[str] = deque([start_url])
         base_domain = urlparse(start_url).netloc
 
@@ -205,7 +201,6 @@ class DOMScanner:
                     queue.append(abs_url)
 
     def _extract_javascript(self, page_url: str, soup: BeautifulSoup) -> list[str]:
-        """Extract inline and external JS from a page."""
         js_list = []
 
         for script in soup.find_all("script"):
@@ -229,7 +224,6 @@ class DOMScanner:
 
 
     def _check_dom_xss(self, url: str, js: str) -> None:
-        """Detect DOM XSS by finding source→sink taint paths."""
         found_sources = []
         found_sinks = []
 
@@ -269,11 +263,10 @@ class DOMScanner:
                             confidence=0.85,
                             poc=f"1. Visit {url}\n2. Inject payload via {source_match} (e.g. URL hash/query)\n3. Payload reaches {sink_match} without sanitization\n4. JavaScript executes in victim's browser context",
                         )
-                        return  # One finding per page to avoid noise
+                        return
 
 
     def _check_prototype_pollution(self, url: str, js: str) -> None:
-        """Detect potential prototype pollution gadgets."""
         gadgets_found = []
         for pattern in PROTO_POLLUTION_SINKS:
             matches = re.finditer(pattern, js)
@@ -303,7 +296,6 @@ class DOMScanner:
 
 
     def _check_exposed_secrets(self, url: str, js: str, html: str) -> None:
-        """Find API keys, tokens, and credentials in JavaScript and HTML."""
         content = js + "\n" + html
         for secret_name, pattern in SECRET_PATTERNS.items():
             matches = re.findall(pattern, content)
@@ -327,7 +319,6 @@ class DOMScanner:
 
 
     def _check_postmessage(self, url: str, js: str) -> None:
-        """Detect insecure postMessage handlers (no origin check)."""
 
         message_handlers = re.finditer(
             r"(?:addEventListener|on)\s*\(\s*['\"]message['\"]"
@@ -371,7 +362,6 @@ class DOMScanner:
 
 
     def _check_websocket(self, url: str, js: str) -> None:
-        """Detect insecure WebSocket usage."""
         ws_connections = re.finditer(
             r"new\s+WebSocket\s*\(\s*['\"]?(wss?://[^'\")\s]+)",
             js,
@@ -408,7 +398,6 @@ class DOMScanner:
 
 
     def _check_client_redirect(self, url: str, js: str) -> None:
-        """Detect client-side open redirects via JavaScript."""
         redirect_patterns = [
             r"location\.href\s*=\s*(?:.*?)(?:getParameter|searchParams|\.get|\.hash|\.search)",
             r"location\.assign\s*\(\s*(?:.*?)(?:getParameter|searchParams|\.get)",
@@ -448,7 +437,6 @@ class DOMScanner:
 
 
     def _check_unsafe_eval(self, url: str, js: str) -> None:
-        """Detect unsafe dynamic code execution."""
         dangerous_patterns = [
             (r"\beval\s*\(\s*(?!['\"]\s*\))", "eval()"),
             (r"\bnew\s+Function\s*\(\s*(?!['\"]\s*\))", "new Function()"),
@@ -487,7 +475,6 @@ class DOMScanner:
 
 
     def _check_storage_sensitive(self, url: str, js: str) -> None:
-        """Detect sensitive data stored in localStorage/sessionStorage."""
         storage_patterns = [
             (r"localStorage\.setItem\s*\(\s*['\"]((?:token|jwt|auth|session|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|credential)[^'\"]*)['\"]", "localStorage"),
             (r"sessionStorage\.setItem\s*\(\s*['\"]((?:token|jwt|auth|session|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|credential)[^'\"]*)['\"]", "sessionStorage"),
@@ -513,7 +500,6 @@ class DOMScanner:
 
 
     def _check_angular_csti(self, url: str, html: str, js: str) -> None:
-        """Detect AngularJS CSTI vulnerabilities."""
         angular_detected = bool(re.search(
             r"angular\.js|angular\.min\.js|ng-app|ng-controller|angularjs",
             html + js,
@@ -568,7 +554,6 @@ class DOMScanner:
 
 
     def _check_jsonp(self, url: str, soup: BeautifulSoup, html: str) -> None:
-        """Detect JSONP endpoints vulnerable to callback injection."""
 
         jsonp_patterns = re.findall(
             r"(?:callback|jsonp|cb|jsonpcallback|func)\s*=\s*['\"]?([a-zA-Z_]\w*)",
@@ -605,7 +590,6 @@ class DOMScanner:
 
 
     def _discover_spa_routes(self, url: str, js: str) -> None:
-        """Discover SPA routes for further testing."""
         routes = set()
         for pattern in SPA_ROUTE_PATTERNS:
             matches = re.findall(pattern, js)
@@ -632,7 +616,6 @@ class DOMScanner:
 
 
     def _add_finding(self, **kwargs: Any) -> None:
-        """Add a deduplicated finding."""
         key = (kwargs.get("vuln_id"), kwargs.get("url"), kwargs.get("title", "")[:80])
         dedup_hash = hashlib.md5(str(key).encode()).hexdigest()
 

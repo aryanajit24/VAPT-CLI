@@ -1,10 +1,3 @@
-"""
-Authenticated session manager for VAPT CLI.
-
-Handles login flows, session persistence, multi-user testing (User A/B),
-token refresh, and cookie management. Works with both the requests-based
-scanners and the Playwright browser engine, keeping auth state in sync.
-"""
 
 from __future__ import annotations
 
@@ -12,7 +5,6 @@ import json
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
 
 import requests
 
@@ -24,12 +16,6 @@ SESSION_STORE = Path.home() / ".vapt" / "sessions"
 
 
 class SessionManager:
-    """Manage authenticated HTTP sessions across scan modules.
-
-    Supports bearer tokens, cookies, form-based login, OAuth2 client
-    credentials, and API keys. Sessions are persisted to disk so scans
-    can resume without re-authenticating.
-    """
 
     def __init__(self):
         self.sessions: dict[str, requests.Session] = {}
@@ -188,7 +174,6 @@ class SessionManager:
         session_a: str = "user_a",
         session_b: str = "user_b",
     ) -> list[dict[str, Any]]:
-        """Test IDOR/privilege escalation by comparing responses from two sessions."""
         findings = []
         sa = self.get_session(session_a)
         sb = self.get_session(session_b)

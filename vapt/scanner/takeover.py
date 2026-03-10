@@ -1,4 +1,3 @@
-"""Subdomain takeover detection scanner."""
 
 from __future__ import annotations
 
@@ -11,7 +10,6 @@ from requests.exceptions import RequestException
 
 from vapt.utils.helpers import sanitize_target
 
-# Service fingerprints: domain_suffix → (service_name, response_fingerprints, nxdomain_vulnerable)
 TAKEOVER_FINGERPRINTS: dict[str, tuple[str, list[str], bool]] = {
     "github.io": ("GitHub Pages", [
         "there isn't a github pages site here",
@@ -130,7 +128,6 @@ TAKEOVER_FINGERPRINTS: dict[str, tuple[str, list[str], bool]] = {
 
 
 class SubdomainTakeoverScanner:
-    """Check a list of subdomains for dangling CNAME / takeover risk."""
 
     def __init__(self, timeout: int = 8, session: Any = None) -> None:
         self.timeout = timeout
@@ -146,18 +143,10 @@ class SubdomainTakeoverScanner:
     def run(
         self, target: str, subdomains: list[str] | None = None,
     ) -> dict[str, Any]:
-        """
-        Check target and all provided subdomains for takeover risk.
-
-        Args:
-            target: The main domain (e.g. "example.com")
-            subdomains: List of subdomains to check. If None, only checks target.
-        """
         target = sanitize_target(target)
         hosts_to_check = [target]
         if subdomains:
             hosts_to_check.extend(subdomains)
-        # Deduplicate
         hosts_to_check = list(dict.fromkeys(hosts_to_check))
 
         result: dict[str, Any] = {
@@ -174,23 +163,18 @@ class SubdomainTakeoverScanner:
         return result
 
     def _check_host(self, host: str) -> list[dict]:
-        """Check a single host for dangling CNAME."""
         findings: list[dict] = []
 
-        # Step 1: DNS lookup for CNAME
         cname = self._get_cname(host)
         if not cname:
             return findings
 
-        # Step 2: Match CNAME to known takeover-vulnerable services
         for domain_suffix, (svc_name, fingerprints, nxdomain_vuln) in TAKEOVER_FINGERPRINTS.items():
             if not cname.endswith(domain_suffix):
                 continue
 
-            # Step 3: Check if the CNAME target resolves
             cname_resolves = self._resolves(cname)
 
-            # If CNAME doesn't resolve and service is NXDOMAIN-vulnerable → likely takeover
             if not cname_resolves and nxdomain_vuln:
                 findings.append(self._make_finding(
                     host, cname, svc_name,
@@ -201,7 +185,6 @@ class SubdomainTakeoverScanner:
                 ))
                 continue
 
-            # Step 4: HTTP check for service fingerprints
             for scheme in ("https", "http"):
                 url = f"{scheme}://{host}"
                 try:
@@ -218,7 +201,6 @@ class SubdomainTakeoverScanner:
                             ))
                             break
                     else:
-                        # No fingerprint but suspicious status
                         if resp.status_code in (404, 410) and len(resp.content) < 200:
                             findings.append(self._make_finding(
                                 host, cname, svc_name,
@@ -227,9 +209,8 @@ class SubdomainTakeoverScanner:
                                 f"Verify manually if takeover is possible.",
                                 f"HTTP {resp.status_code} — {len(resp.content)} bytes",
                             ))
-                    break  # One scheme is enough
+                    break
                 except RequestException:
-                    # Connection failure = strong takeover signal
                     findings.append(self._make_finding(
                         host, cname, svc_name,
                         "high", 8.1,
@@ -242,7 +223,6 @@ class SubdomainTakeoverScanner:
         return findings
 
     def _get_cname(self, host: str) -> str | None:
-        """Resolve CNAME record for host."""
         try:
             resolver = dns.resolver.Resolver()
             resolver.lifetime = float(self.timeout)
@@ -253,7 +233,6 @@ class SubdomainTakeoverScanner:
             return None
 
     def _resolves(self, host: str) -> bool:
-        """Check if a hostname resolves to any IP."""
         try:
             socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
             return True

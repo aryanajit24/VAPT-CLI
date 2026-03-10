@@ -1,4 +1,3 @@
-"""Alert dispatch via Slack, Discord, and email."""
 
 from __future__ import annotations
 
@@ -15,7 +14,6 @@ console = Console(stderr=True)
 
 
 def notify_console(message: str, level: str = "info") -> None:
-    """Print a styled notification to the console."""
     style_map = {
         "info": "bold cyan",
         "warning": "bold yellow",
@@ -31,11 +29,6 @@ def notify_webhook(
     payload: dict[str, Any],
     timeout: int = 10,
 ) -> bool:
-    """
-    POST a JSON payload to a webhook URL.
-
-    Returns True on success, False otherwise.
-    """
     try:
         response = requests.post(url, json=payload, timeout=timeout)
         response.raise_for_status()
@@ -51,7 +44,6 @@ def notify_slack(
     risk_level: str = "info",
     timeout: int = 10,
 ) -> bool:
-    """Send a Slack webhook notification."""
     emoji_map = {
         "critical": ":red_circle:",
         "high": ":orange_circle:",
@@ -74,11 +66,6 @@ def notify_email(
     body: str,
     use_tls: bool = True,
 ) -> bool:
-    """
-    Send an email notification via SMTP.
-
-    Returns True on success, False otherwise.
-    """
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
@@ -106,13 +93,6 @@ def dispatch_alerts(
     scan_result: dict[str, Any],
     config: dict[str, Any],
 ) -> None:
-    """
-    Fan out notifications to every channel the user has configured.
-
-    Console alerts always fire.  Webhook, Slack, and email only trigger
-    if the matching config key is present.  This means zero setup
-    is needed for basic usage — fancy integrations are opt-in.
-    """
     risk_level = scan_result.get("risk_level", "info")
     target = scan_result.get("target", "unknown")
     score = scan_result.get("overall_score", 0)

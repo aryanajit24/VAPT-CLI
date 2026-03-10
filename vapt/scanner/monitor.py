@@ -1,4 +1,3 @@
-"""Continuous monitoring for target changes."""
 
 from __future__ import annotations
 
@@ -15,7 +14,6 @@ from vapt.utils.helpers import format_timestamp, sanitize_target
 
 
 class Monitor:
-    """Periodically snapshot a target and fire callbacks when things change."""
 
     def __init__(
         self,
@@ -24,14 +22,6 @@ class Monitor:
         on_change: Callable[[dict[str, Any]], None] | None = None,
         timeout: int = 10,
     ) -> None:
-        """
-        Parameters
-        ----------
-        target:    Hostname, IP, or URL to keep an eye on.
-        interval:  How often to re-scan, in seconds (default 5 min).
-        on_change: Callback fired whenever the snapshot differs from baseline.
-        timeout:   Network timeout for individual probes.
-        """
         self.target = sanitize_target(target)
         self.interval = interval
         self.on_change = on_change or (lambda d: None)
@@ -42,7 +32,6 @@ class Monitor:
 
 
     def _snapshot(self) -> dict[str, Any]:
-        """Grab a point-in-time picture of the target's state."""
         port_result = self._port_scanner.run(self.target)
         web_result = self._web_scanner.run(self.target)
 
@@ -59,7 +48,6 @@ class Monitor:
         return snapshot
 
     def _check_ssl_days(self, host: str) -> int | None:
-        """Return the number of days until the SSL cert expires, or None."""
         try:
             ctx = ssl.create_default_context()
             with ctx.wrap_socket(
@@ -81,7 +69,6 @@ class Monitor:
     def _diff(
         self, before: dict[str, Any], after: dict[str, Any]
     ) -> dict[str, Any] | None:
-        """Compare two snapshots and return a change dict, or None if no delta."""
         changes: dict[str, Any] = {}
 
         new_ports = after["open_ports"] - before["open_ports"]
@@ -101,7 +88,6 @@ class Monitor:
         if delta > 0:
             changes["new_findings_delta"] = delta
 
-        # Alert if SSL cert is getting close to expiry.
         ssl_days = after.get("ssl_days_left")
         if ssl_days is not None and ssl_days <= 30:
             changes["ssl_expiring_soon"] = f"{ssl_days} days left"
@@ -110,13 +96,6 @@ class Monitor:
 
 
     def _persist_snapshot(self, snapshot: dict[str, Any], changes: dict[str, Any] | None) -> None:
-        """
-        Save a snapshot (and any detected changes) to the history database.
-
-        Uses the MonitorHistory model from vapt.database.models.  If the DB
-        isn't reachable for whatever reason we just skip — monitoring should
-        keep running regardless.
-        """
         try:
             from vapt.database.db import get_session, init_db
             from vapt.database.models import MonitorHistory
@@ -124,7 +103,6 @@ class Monitor:
             init_db()
             session = get_session()
 
-            # We serialise the snapshot dict, converting the set of ports to a list.
             serialisable_snapshot = {
                 **snapshot,
                 "open_ports": sorted(snapshot["open_ports"]),
@@ -140,23 +118,15 @@ class Monitor:
             session.commit()
             session.close()
         except Exception:
-            pass  # don't let a DB hiccup kill the monitor loop
+            pass
 
 
     def run_once(self) -> dict[str, Any]:
-        """Take one snapshot (handy for tests and quick health checks)."""
         snap = self._snapshot()
         self._persist_snapshot(snap, None)
         return snap
 
     def start(self, max_iterations: int | None = None) -> None:
-        """
-        Begin the monitoring loop.
-
-        Parameters
-        ----------
-        max_iterations: Stop after N rounds (None = run forever).
-        """
         self._baseline = self._snapshot()
         self._persist_snapshot(self._baseline, None)
         iteration = 0
@@ -166,7 +136,6 @@ class Monitor:
             current = self._snapshot()
             changes = self._diff(self._baseline, current)
 
-            # Always persist — even if nothing changed — so we have a timeline.
             self._persist_snapshot(current, changes)
 
             if changes:

@@ -1,0 +1,264 @@
+# ─────────────────────────────────────────────────────────────────
+# Airbnb Bug Bounty — HackerOne
+# Campaign: Feb 9 – Mar 27, 2026 (25% bonus for Crit & High)
+# ─────────────────────────────────────────────────────────────────
+
+program:
+  name: Airbnb
+  platform: hackerone
+  url: https://hackerone.com/airbnb
+
+scope:
+  # ── Higher Impact Scope ──────────────────────────────────────
+  in_scope:
+    - target: "www.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Primary web — 359 resolved reports (23%). Focus on AI Customer Service at /help/contact-us"
+
+    - target: "*.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Wildcard — 308 resolved (19%). Large attack surface"
+
+    - target: "api.airbnb.com"
+      type: api
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Core API — 18 resolved (1%)"
+
+    - target: "support-api.airbnb.com"
+      type: api
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Support API — 1 resolved (0%). Low competition"
+
+    - target: "next.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Next gen frontend — 3 resolved (0%)"
+
+    - target: "one.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "2 resolved (0%)"
+
+    - target: "m.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Mobile web — 0 resolved (0%). Fresh target"
+
+    - target: "callbacks.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Callback handler — 0 resolved. OAuth/webhook surface"
+
+    - target: "assets.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Static assets — 3 resolved (0%)"
+
+    # ── Lower Impact Scope ─────────────────────────────────────
+    - target: "www.hoteltonight.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 11 resolved (1%)"
+
+    - target: "open.airbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 1 resolved (0%)"
+
+    - target: "*.withairbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 68 resolved (4%)"
+
+    - target: "*.musta.ch"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Wildcard — 0 resolved. New addition Sep 2025"
+
+    - target: "*.muscache.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 12 resolved (1%)"
+
+    - target: "*.luxuryretreats.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 74 resolved (5%)"
+
+    - target: "*.hoteltonight.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact wildcard — 1 resolved (0%)"
+
+    - target: "*.hoteltonight-test.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 13 resolved (1%)"
+
+    - target: "*.byairbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 6 resolved (0%)"
+
+    - target: "*.atairbnb.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 14 resolved (1%)"
+
+    - target: "*.airbnbpayments.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Payment domain — 0 resolved. New addition Sep 2025"
+
+    - target: "*.airbnbcitizen.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — 10 resolved (1%)"
+
+    - target: "*.airbnb.org"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Wildcard — 0 resolved. New addition Aug 2025"
+
+    - target: "*.airbnb-aws.com"
+      type: web
+      eligible_for_bounty: true
+      max_severity: critical
+      notes: "Lower impact — AWS related — 2 resolved (0%)"
+
+  # ── Out of scope ─────────────────────────────────────────────
+  out_of_scope:
+    - target: "provider.demo.urbandoor.com"
+      type: web
+      notes: "Ineligible — no bounty"
+    - target: "luckeyhomes.com"
+      type: web
+      notes: "Ineligible"
+    - target: "luckey.partners"
+      type: web
+      notes: "Ineligible"
+    - target: "luckey.in"
+      type: web
+      notes: "Ineligible"
+    - target: "luckey.fr"
+      type: web
+      notes: "Ineligible"
+    - target: "luckey.app"
+      type: web
+      notes: "Ineligible"
+    - target: "demo.urbandoor.com"
+      type: web
+      notes: "Ineligible"
+    - target: "admin.demo.urbandoor.com"
+      type: web
+      notes: "Ineligible"
+
+# ── Excluded vulnerability categories ──────────────────────────
+excluded_vulnerabilities:
+  - category: missing_security_headers
+    reason: Informational only
+    detail: "Missing headers (CSP, X-Frame-Options, etc.) without demonstrated impact"
+
+  - category: rate_limiting
+    reason: Not a vulnerability on its own
+    detail: "Lack of rate limiting without demonstrated abuse scenario"
+
+  - category: self_xss
+    reason: Not impactful
+    detail: "Self-XSS requires social engineering"
+
+  - category: spf_dmarc
+    reason: Email config issues excluded
+    detail: "SPF/DKIM/DMARC misconfigurations"
+
+  - category: best_practices
+    reason: Informational
+    detail: "General best practice recommendations without demonstrable impact"
+
+# ── Bounty tiers ───────────────────────────────────────────────
+# Base payouts + 25% promo bonus for Critical & High during campaign
+bounty:
+  - severity: critical
+    min: 18000
+    max: 25000
+    notes: "+25% promo bonus = $22,500-$31,250 effective"
+  - severity: high
+    min: 5000
+    max: 15000
+    notes: "+25% promo bonus = $6,250-$18,750 effective"
+  - severity: medium
+    min: 1500
+    max: 5000
+    notes: "AI feature medium: $2,500 + 25% bonus = $3,125"
+  - severity: low
+    min: 500
+    max: 1500
+
+# ── Testing rules ──────────────────────────────────────────────
+testing:
+  max_requests_per_second: 5
+  no_automated_scanners: false
+  no_destructive_testing: true
+  required_headers:
+    X-Bug-Bounty: vapt-cli-testing
+  rate_profile: polite
+  modules:
+    - web
+    - api
+    - ssl
+    - jsscan
+    - cve
+    - recon
+    - domscan
+
+# ── Campaign notes ─────────────────────────────────────────────
+# Priority targets for this campaign:
+#
+# 1. AI Customer Service Assistant (NEW SCOPE!)
+#    URL: https://www.airbnb.com/help/contact-us?entry=HELP_CENTER&role=guest
+#    Bugs to look for:
+#    - Prompt injection / jailbreak → High ($5,000 + 25%)
+#    - System prompt disclosure → High ($5,000 + 25%)
+#    - Get AI to solicit sensitive info → Medium ($2,500 + 25%)
+#    - Info disclosure → Medium ($2,500 + 25%)
+#    - SSRF through AI → High ($5,000 + 25%)
+#    - RCE through AI → Critical ($18k-$25k + 25%)
+#    - Mass data exfil → Critical ($18k-$25k + 25%)
+#
+# 2. Fresh wildcard targets with 0 resolved reports:
+#    - *.musta.ch (added Sep 2025)
+#    - *.airbnbpayments.com (added Sep 2025)
+#    - *.airbnb.org (added Aug 2025)
+#    - m.airbnb.com (0 resolved)
+#    - callbacks.airbnb.com (0 resolved — OAuth/webhook)
+#
+# 3. Low-competition API targets:
+#    - support-api.airbnb.com (1 resolved)
+#    - api.airbnb.com (18 resolved)
+#
+# Total resolved across all assets: ~1,007
+# Campaign: Feb 9, 2026 12:00 PM PT → Mar 27, 2026 11:59 PM PT

@@ -1,4 +1,3 @@
-"""Authentication helper for injecting credentials into scan requests."""
 
 from __future__ import annotations
 
@@ -11,7 +10,6 @@ from requests.exceptions import RequestException
 
 
 class AuthManager:
-    """Create and maintain authenticated HTTP sessions for scanners."""
 
     def __init__(
         self,
@@ -26,20 +24,6 @@ class AuthManager:
         custom_headers: dict[str, str] | None = None,
         timeout: int = 10,
     ) -> None:
-        """
-        Parameters
-        ----------
-        method : str
-            One of: none, bearer, cookie, form, basic, digest, oauth2, header
-        token : str
-            Bearer / API token value
-        cookies : dict
-            Manual cookies to inject  {"session": "abc123"}
-        credentials : dict
-            {"username": "admin", "password": "pass"}
-        login_url : str
-            URL of the login page (for form-based auth)
-        """
         self.method = method.lower()
         self.token = token
         self.cookies = cookies or {}
@@ -53,7 +37,6 @@ class AuthManager:
         self._session: requests.Session | None = None
 
     def get_session(self) -> requests.Session:
-        """Return an authenticated requests.Session ready for scanning."""
         if self._session is not None:
             return self._session
 
@@ -77,9 +60,7 @@ class AuthManager:
             self._setup_oauth2(session)
         elif self.method == "header":
             self._setup_custom_headers(session)
-        # "none" = no auth
 
-        # Always apply custom headers on top
         if self.custom_headers:
             session.headers.update(self.custom_headers)
 
@@ -87,11 +68,9 @@ class AuthManager:
         return session
 
     def is_authenticated(self) -> bool:
-        """Check whether we're using any auth method."""
         return self.method != "none"
 
     def describe(self) -> str:
-        """Return a human-readable description of the auth method."""
         descs = {
             "none": "No authentication",
             "bearer": "Bearer token",
@@ -108,7 +87,6 @@ class AuthManager:
     def _setup_bearer(self, session: requests.Session) -> None:
         if not self.token:
             return
-        # Handle both "Bearer xyz" and raw "xyz"
         token_val = self.token
         if not token_val.lower().startswith("bearer "):
             token_val = f"Bearer {token_val}"
@@ -121,19 +99,13 @@ class AuthManager:
 
 
     def _setup_form_login(self, session: requests.Session) -> None:
-        """
-        Auto-detect login form, fill credentials, submit, and capture
-        the session cookie. This handles the majority of web app logins.
-        """
         if not self.login_url:
             return
 
         try:
-            # 1. GET the login page
             resp = session.get(self.login_url, timeout=self.timeout)
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            # 2. Find the login form (first POST form with a password field)
             form = None
             for f in soup.find_all("form"):
                 if f.find("input", {"type": "password"}):
@@ -141,13 +113,11 @@ class AuthManager:
                     break
 
             if form is None:
-                # Fallback: try the first form
                 form = soup.find("form")
 
             if form is None:
                 return
 
-            # 3. Extract form action and all fields
             action = urljoin(self.login_url, form.get("action") or self.login_url)
             method = (form.get("method") or "post").lower()
 
@@ -164,14 +134,12 @@ class AuthManager:
                 elif inp_type == "email" or _is_username_field(name):
                     data[name] = self.credentials.get("username", "")
                 elif inp_type == "hidden":
-                    # CSRF tokens, etc. — keep the original value
                     data[name] = value
                 elif inp_type == "submit":
                     data[name] = value or "Login"
                 else:
                     data[name] = value
 
-            # 4. Override with explicit credential keys if field names match
             if "username" in self.credentials:
                 for key in data:
                     if _is_username_field(key):
@@ -181,7 +149,6 @@ class AuthManager:
                     if _is_password_field(key):
                         data[key] = self.credentials["password"]
 
-            # 5. Submit
             if method == "post":
                 session.post(action, data=data, timeout=self.timeout,
                              allow_redirects=True)
@@ -189,7 +156,6 @@ class AuthManager:
                 session.get(action, params=data, timeout=self.timeout,
                             allow_redirects=True)
 
-            # Session cookies are now captured in the session object
 
         except RequestException:
             pass

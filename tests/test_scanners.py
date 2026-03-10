@@ -1,4 +1,3 @@
-"""Tests for VAPT CLI scanner modules."""
 
 from __future__ import annotations
 
@@ -14,8 +13,6 @@ from vapt.scanner.cve import CVEScanner
 from vapt.scanner.recon import ReconScanner
 from vapt.utils.validators import validate_target, validate_port
 
-
-# ─── Validators ───────────────────────────────────────────────────────────────
 
 class TestValidators:
     def test_valid_hostname(self):
@@ -65,12 +62,9 @@ class TestValidators:
         assert not ok
 
 
-# ─── PortScanner ──────────────────────────────────────────────────────────────
-
 class TestPortScanner:
     def test_run_returns_expected_keys(self, monkeypatch):
         scanner = PortScanner(timeout=1)
-        # Stub out actual scanning
         monkeypatch.setattr(scanner, "_scan", lambda host, ports: [
             {"port": 80, "protocol": "tcp", "state": "open", "service": "http",
              "product": "", "version": "", "banner": ""}
@@ -111,8 +105,6 @@ class TestPortScanner:
         assert "error" in result
 
 
-# ─── WebScanner ───────────────────────────────────────────────────────────────
-
 class TestWebScanner:
     @resp_lib.activate
     def test_missing_security_headers_generates_findings(self):
@@ -137,27 +129,21 @@ class TestWebScanner:
             status=200,
         )
         scanner = WebScanner(timeout=5)
-        # sanitize_target strips the scheme; scanner normalises to https
         result = scanner.run("http://example.com")
         assert result["target"].startswith("https://")
 
     @resp_lib.activate
     def test_xss_payload_reflected_generates_finding(self):
-        """Scanner detects reflected XSS when payload appears in response."""
-        # Use a callback for ALL requests — reflect XSS payloads, serve normal pages otherwise
         def smart_handler(request):
             from urllib.parse import unquote
             decoded = unquote(request.url)
 
-            # Landing page: include a link with ?q= so crawler discovers params
             if "?" not in request.url or request.url.endswith("example.com/"):
                 body = '<html><a href="https://example.com/?q=test">link</a></html>'
                 return (200, {"Content-Type": "text/html"}, body)
 
-            # Reflect XSS payloads in the response body
             for marker in ["<script>", "<img ", "<svg ", "javascript:"]:
                 if marker.lower() in decoded.lower():
-                    # Extract the payload from the query string and reflect it
                     parts = decoded.split("q=", 1)
                     reflected = parts[1] if len(parts) > 1 else decoded
                     return (200, {"Content-Type": "text/html"}, f"<html>{reflected}</html>")
@@ -189,21 +175,17 @@ class TestWebScanner:
         assert "error" in result
 
 
-# ─── APIScanner ───────────────────────────────────────────────────────────────
-
 class TestAPIScanner:
     @resp_lib.activate
     def test_discovers_accessible_endpoints(self):
         resp_lib.add(resp_lib.GET, "https://example.com/api/v1/users", json={"users": []}, status=200)
         resp_lib.add(resp_lib.OPTIONS, "https://example.com", status=200)
-        # All other paths return 404
         for path in [
             "/api/v2/users", "/api/users", "/api/admin", "/api/config",
             "/api/health", "/api/docs", "/swagger.json", "/openapi.json",
             "/v1/users", "/v2/users",
         ]:
             resp_lib.add(resp_lib.GET, f"https://example.com{path}", status=404)
-        # Admin BOLA checks
         for path in ["/api/admin", "/api/v1/admin", "/admin/api"]:
             resp_lib.add(resp_lib.GET, f"https://example.com{path}", status=404)
 
@@ -220,7 +202,6 @@ class TestAPIScanner:
             status=200,
         )
         resp_lib.add(resp_lib.OPTIONS, "https://example.com", status=200)
-        # Remaining paths return 404
         for path in [
             "/api/v2/users", "/api/users", "/api/admin", "/api/config",
             "/api/health", "/api/docs", "/swagger.json", "/openapi.json",
@@ -235,8 +216,6 @@ class TestAPIScanner:
         data_exposure = [f for f in result["findings"] if f.get("vuln_id") == "API-002"]
         assert len(data_exposure) >= 1
 
-
-# ─── CVEScanner ───────────────────────────────────────────────────────────────
 
 class TestCVEScanner:
     @resp_lib.activate
@@ -264,7 +243,6 @@ class TestCVEScanner:
         )
         scanner = CVEScanner(timeout=5)
         result = scanner.run("example.com")
-        # nginx/1.24.0 is NOT in the vulnerable range
         assert isinstance(result["findings"], list)
 
     def test_match_cves_no_banners(self):
@@ -273,17 +251,13 @@ class TestCVEScanner:
         assert findings == []
 
 
-# ─── Fuzzer ───────────────────────────────────────────────────────────────────
-
 from vapt.scanner.fuzzer import Fuzzer
 
 
 class TestFuzzer:
-    """Verify the fuzzer only reports REAL vulnerabilities, not 403 blocks."""
 
     @resp_lib.activate
     def test_403_is_not_reported(self):
-        """A 403 response means server correctly blocks access - NOT a bug."""
         resp_lib.add(
             resp_lib.GET,
             "https://example.com/.git/HEAD",
@@ -299,7 +273,6 @@ class TestFuzzer:
         fuzzer = Fuzzer(timeout=3, max_workers=1, extensions=False,
                         safety_config={"max_fuzz_paths": 5})
         result = fuzzer.run("https://example.com")
-        # NO findings should be generated from 403 responses
         assert len(result["findings"]) == 0, (
             f"Fuzzer reported {len(result['findings'])} false positive(s) from 403 responses! "
             f"Titles: {[f.get('title') for f in result['findings']]}"
@@ -307,7 +280,6 @@ class TestFuzzer:
 
     @resp_lib.activate
     def test_200_with_real_content_is_reported(self):
-        """A 200 with actual .git/HEAD content IS a real vulnerability."""
         resp_lib.add(
             resp_lib.GET,
             "https://example.com/.git/HEAD",
@@ -328,7 +300,6 @@ class TestFuzzer:
 
     @resp_lib.activate
     def test_200_with_blocked_content_not_reported(self):
-        """A 200 that returns a WAF/CDN block page is a false positive."""
         resp_lib.add(
             resp_lib.GET,
             "https://example.com/.env",
@@ -350,7 +321,6 @@ class TestFuzzer:
 
     @resp_lib.activate
     def test_401_is_not_reported(self):
-        """A 401 means auth is working correctly - NOT a bug."""
         resp_lib.add(
             resp_lib.GET,
             re.compile(r"https://example\.com/.*"),

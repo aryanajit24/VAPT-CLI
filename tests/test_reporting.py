@@ -1,4 +1,3 @@
-"""Tests for VAPT CLI reporting modules."""
 
 from __future__ import annotations
 

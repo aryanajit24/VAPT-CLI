@@ -1,4 +1,3 @@
-"""Token randomness analyzer — Burp Sequencer replacement."""
 
 from __future__ import annotations
 
@@ -14,7 +13,6 @@ import requests
 
 @dataclass
 class SequencerResult:
-    """Results from token randomness analysis."""
 
     sample_size: int = 0
     entropy_per_char: float = 0.0
@@ -47,7 +45,6 @@ class SequencerResult:
 
 
 class Sequencer:
-    """Collect tokens from an endpoint and analyze their randomness."""
 
     def __init__(
         self,

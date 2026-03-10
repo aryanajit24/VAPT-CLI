@@ -1,4 +1,3 @@
-"""Burp Intruder replacement — position-based HTTP fuzzing engine."""
 
 from __future__ import annotations
 
@@ -67,7 +66,6 @@ BUILTIN_PAYLOADS: dict[str, list[str]] = {
 
 @dataclass
 class IntruderResult:
-    """Single fuzzing attempt result."""
 
     position_index: int
     payload: str
@@ -84,7 +82,6 @@ class IntruderResult:
 
 @dataclass
 class IntruderConfig:
-    """Configuration for an intruder attack."""
 
     base_url: str
     method: str = "GET"
@@ -105,7 +102,6 @@ class IntruderConfig:
 
 
 class PayloadGenerator:
-    """Generate payload sequences for fuzzing."""
 
     @staticmethod
     def from_list(items: list[str]) -> list[str]:
@@ -155,7 +151,6 @@ class PayloadGenerator:
 
 
 class Intruder:
-    """Position-based HTTP fuzzing engine with 4 attack modes."""
 
     POSITION_MARKER = "§"
 

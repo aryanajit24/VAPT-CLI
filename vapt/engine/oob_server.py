@@ -1,11 +1,3 @@
-"""
-Out-of-Band (OOB) callback server for blind vulnerability confirmation.
-
-Provides a lightweight HTTP/DNS listener that receives callbacks from
-blind SSRF, blind XSS, blind XXE, and other injection payloads.
-Also integrates with interact.sh for external OOB when a public IP
-is not available.
-"""
 
 from __future__ import annotations
 
@@ -59,15 +51,6 @@ class CallbackRecord:
 
 
 class OOBServer:
-    """Out-of-Band callback server for confirming blind vulnerabilities.
-
-    Starts a local HTTP listener on a configurable port. Payloads
-    include a unique token in the callback URL so each hit can be
-    correlated back to the exact injection point that triggered it.
-
-    For internet-reachable testing, integrates with interact.sh as
-    a fallback when a local listener is not accessible externally.
-    """
 
     def __init__(self, listen_host: str = "0.0.0.0", listen_port: int = 8899):
         self.host = listen_host

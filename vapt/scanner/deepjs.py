@@ -1,10 +1,8 @@
-"""Deep JavaScript analysis for API endpoints, secrets, and DOM sinks."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import math
 import re
 import time
 from collections import deque
@@ -89,12 +87,6 @@ PARAM_PATTERNS = [
 
 
 class DeepJSRecon:
-    """
-    Deep JavaScript reconnaissance engine.
-    
-    Goes beyond simple secret scanning to map the entire attack surface
-    from JavaScript source code.
-    """
 
     def __init__(
         self,
@@ -124,12 +116,6 @@ class DeepJSRecon:
         self.findings: list[dict] = []
 
     def run(self, target: str) -> dict[str, Any]:
-        """
-        Run deep JS reconnaissance.
-        
-        Returns comprehensive recon data including ALL API endpoints,
-        routes, GraphQL operations, configs, and findings.
-        """
         target = sanitize_target(target)
         started = time.time()
         
@@ -167,7 +153,6 @@ class DeepJSRecon:
         }
 
     def _discover_js_files(self, target: str) -> list[str]:
-        """Discover all JavaScript files from the target."""
         js_urls: set[str] = set()
         
         try:
@@ -180,7 +165,6 @@ class DeepJSRecon:
                 if full_url.endswith((".js", ".mjs", ".jsx", ".ts")) or "/chunk" in full_url:
                     js_urls.add(full_url)
             
-            # not fetched, analyzed in-place
             for script in soup.find_all("script", src=False):
                 if script.string and len(script.string) > 100:
                     self.js_files.append({
@@ -229,7 +213,6 @@ class DeepJSRecon:
         return list(js_urls)
 
     def _analyze_js_file(self, js_url: str, target: str) -> None:
-        """Fetch and deeply analyze a JavaScript file."""
         try:
             resp = self.session.get(js_url, timeout=self.timeout, verify=False)
             if resp.status_code != 200:
@@ -274,7 +257,6 @@ class DeepJSRecon:
             pass
 
     def _extract_api_endpoints(self, content: str, source: str, target: str) -> None:
-        """Extract all API endpoint references from JS content."""
         target_host = urlparse(target).netloc
         
         for pattern in API_CALL_PATTERNS:
@@ -322,7 +304,6 @@ class DeepJSRecon:
                 })
 
     def _extract_routes(self, content: str) -> None:
-        """Extract client-side routes from JS content."""
         for pattern in ROUTE_PATTERNS:
             for match in pattern.finditer(content):
                 route = match.group(1)
@@ -331,7 +312,6 @@ class DeepJSRecon:
                         self.client_routes.append(route)
 
     def _extract_graphql(self, content: str, source: str) -> None:
-        """Extract GraphQL operations from JS content."""
         for pattern in GRAPHQL_PATTERNS:
             for match in pattern.finditer(content):
                 groups = match.groups()
@@ -356,7 +336,6 @@ class DeepJSRecon:
                 })
 
     def _extract_websockets(self, content: str) -> None:
-        """Extract WebSocket URLs from JS content."""
         for pattern in WEBSOCKET_PATTERNS:
             for match in pattern.finditer(content):
                 ws_url = match.group(1) if match.lastindex else match.group(0)
@@ -364,7 +343,6 @@ class DeepJSRecon:
                     self.websocket_urls.append(ws_url)
 
     def _extract_internal_urls(self, content: str) -> None:
-        """Extract internal/staging/dev URLs from JS content."""
         for pattern in INTERNAL_URL_PATTERNS:
             for match in pattern.finditer(content):
                 url = match.group(0).strip("'\"` <>")
@@ -372,7 +350,6 @@ class DeepJSRecon:
                     self.internal_urls.append(url)
 
     def _extract_configs(self, content: str, source: str) -> None:
-        """Extract configuration objects from JS content."""
         for pattern in CONFIG_PATTERNS:
             for match in pattern.finditer(content):
                 config_text = match.group(1) if match.lastindex else match.group(0)
@@ -383,7 +360,6 @@ class DeepJSRecon:
                 })
 
     def _extract_params(self, content: str, source: str) -> None:
-        """Extract hidden/undocumented parameters from JS content."""
         for pattern in PARAM_PATTERNS:
             for match in pattern.finditer(content):
                 param_text = match.group(1) if match.lastindex else match.group(0)
@@ -406,7 +382,6 @@ class DeepJSRecon:
                         })
 
     def _extract_chunk_urls(self, content: str, source: str, target: str) -> None:
-        """Extract webpack chunk URLs for additional mining."""
         for pattern in CHUNK_PATTERNS:
             for match in pattern.finditer(content):
                 text = match.group(1) if match.lastindex else match.group(0)
@@ -418,10 +393,9 @@ class DeepJSRecon:
                         self.webpack_chunks.append(chunk_url)
 
     def _mine_webpack_chunks(self, target: str) -> None:
-        """Fetch and analyze discovered webpack chunks."""
         for chunk_url in self.webpack_chunks[:self.max_chunks]:
             if any(js["url"] == chunk_url for js in self.js_files):
-                continue  # Already analyzed
+                continue
             
             try:
                 if not chunk_url.startswith("http"):
@@ -446,7 +420,6 @@ class DeepJSRecon:
                 continue
 
     def _check_source_maps(self) -> None:
-        """Check if source maps are accessible (massive info disclosure)."""
         for sm in self.source_maps:
             try:
                 resp = self.session.get(sm["map_url"], timeout=self.timeout, verify=False)
@@ -496,7 +469,6 @@ class DeepJSRecon:
                 sm["status"] = "error"
 
     def _deduplicate_endpoints(self, target: str) -> None:
-        """Remove duplicate endpoints and normalize URLs."""
         seen = set()
         unique_endpoints = []
         
@@ -517,7 +489,6 @@ class DeepJSRecon:
         self.hidden_params = unique_params
 
     def _generate_findings(self, target: str) -> None:
-        """Generate security findings from the recon data."""
         
         if self.internal_urls:
             self.findings.append({
@@ -602,11 +573,9 @@ class DeepJSRecon:
             })
 
     def get_endpoints_for_scanning(self) -> list[str]:
-        """Return a list of discovered endpoint URLs for use by other scanners."""
         return list({ep["full_url"] for ep in self.api_endpoints if ep.get("full_url")})
 
     def get_sensitive_endpoints(self) -> list[dict]:
-        """Return endpoints that likely handle sensitive operations."""
         from vapt.engine.elite_intelligence import SENSITIVE_ENDPOINT_PATTERNS
         
         sensitive = []

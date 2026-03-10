@@ -1,20 +1,9 @@
-"""
-Correlator — connect the dots between findings.
-
-Individual vulnerabilities are dangerous, but *combinations* of them
-are often catastrophic.  This module looks for attack chains (e.g. XSS
-+ broken auth = session hijacking) and clusters related CVEs together
-so the report paints a complete picture.
-"""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
 
-# These pairs define multi-step attack scenarios.  If both categories
-# appear in the same scan, we flag it as an attack chain with critical
-# severity — because an attacker would absolutely chain them.
 ATTACK_CHAIN_PAIRS: list[tuple[str, str, str]] = [
     ("injection", "authentication", "Auth bypass via SQL injection chain"),
     ("xss", "authentication", "Session hijacking via XSS + broken auth"),
@@ -25,22 +14,8 @@ ATTACK_CHAIN_PAIRS: list[tuple[str, str, str]] = [
 
 
 class Correlator:
-    """Spot relationships and attack chains across scan findings.
-
-    Feed it a list of findings and it'll tell you which ones work
-    together to create something worse than any single issue.
-    """
 
     def correlate(self, findings: list[dict[str, Any]]) -> dict[str, Any]:
-        """
-        Analyse a list of findings and return correlation metadata.
-
-        Returns:
-          - grouped_by_category: findings bucketed by category
-          - attack_chains: detected multi-step attack paths
-          - related_cves: CVE clusters
-          - correlation_summary: human-readable insight list
-        """
         grouped = self._group_by_category(findings)
         chains = self._detect_attack_chains(grouped)
         cve_clusters = self._cluster_cves(findings)

@@ -1,4 +1,3 @@
-"""Tests for Burp Suite replacement modules."""
 
 from __future__ import annotations
 
@@ -8,9 +7,6 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 class TestCodecEncodeDecode(unittest.TestCase):
@@ -166,9 +162,6 @@ class TestCodecUtilities(unittest.TestCase):
         self.assertIn("sha256", result)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestSequencerAnalysis(unittest.TestCase):
 
     def setUp(self):
@@ -241,9 +234,6 @@ class TestSequencerAnalysis(unittest.TestCase):
         score = self.Sequencer._block_frequency_test(tokens)
         self.assertGreaterEqual(score, 0)
         self.assertLessEqual(score, 1)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 class TestIntruderPayloads(unittest.TestCase):
@@ -401,9 +391,6 @@ class TestIntruderConfig(unittest.TestCase):
         self.assertEqual(s["total_requests"], 0)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestCrawlerDataclasses(unittest.TestCase):
 
     def test_crawl_form(self):
@@ -454,9 +441,6 @@ class TestCrawlerDataclasses(unittest.TestCase):
         c = Crawler("http://example.com")
         result = c._normalize_url("#section", "http://example.com/page")
         self.assertIsNone(result)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 class TestProxyStorage(unittest.TestCase):
@@ -555,9 +539,6 @@ class TestProxyStorage(unittest.TestCase):
             self.assertEqual(len(data), 3)
         finally:
             os.unlink(out.name)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 class TestProxyServerHelpers(unittest.TestCase):
@@ -668,9 +649,6 @@ class TestCertificateAuthority(unittest.TestCase):
         self.assertNotEqual(c1[0], c2[0])
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestProxyServerInit(unittest.TestCase):
 
     def test_proxy_server_init(self):
@@ -693,23 +671,25 @@ class TestProxyServerInit(unittest.TestCase):
             shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-
 class TestTUIImports(unittest.TestCase):
 
+    @unittest.skipUnless(
+        __import__("importlib").util.find_spec("textual"),
+        "textual not installed",
+    )
     def test_import_tui(self):
         from vapt.tui.app import VAPTApp, launch_tui
         self.assertIsNotNone(VAPTApp)
         self.assertIsNotNone(launch_tui)
 
+    @unittest.skipUnless(
+        __import__("importlib").util.find_spec("textual"),
+        "textual not installed",
+    )
     def test_import_tabs(self):
         from vapt.tui.app import CodecTab, IntruderTab, ProxyTab, RepeaterTab
         for tab_cls in (ProxyTab, RepeaterTab, IntruderTab, CodecTab):
             self.assertIsNotNone(tab_cls)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 class TestCLICommands(unittest.TestCase):

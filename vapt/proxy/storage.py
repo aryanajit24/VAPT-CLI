@@ -1,4 +1,3 @@
-"""SQLite storage for intercepted proxy flows."""
 
 from __future__ import annotations
 
@@ -12,7 +11,6 @@ from typing import Optional
 
 @dataclass
 class Flow:
-    """Single HTTP request/response pair."""
 
     id: int = 0
     timestamp: float = 0.0
@@ -34,7 +32,6 @@ class Flow:
 
 
 class ProxyStorage:
-    """Persistent storage for proxy flows using SQLite."""
 
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:

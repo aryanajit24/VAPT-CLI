@@ -1,11 +1,3 @@
-"""
-AI-powered vulnerability triage engine.
-
-Analyzes scan findings using rule-based intelligence to filter false
-positives, predict duplicates, estimate severity accurately, score
-novelty, and auto-generate professional report text. Acts as the
-"brain" between raw scanner output and what gets reported.
-"""
 
 from __future__ import annotations
 
@@ -68,13 +60,6 @@ HIGH_VALUE_PATTERNS = [
 
 
 class AITriage:
-    """Intelligent finding analysis and prioritization.
-
-    Applies multi-factor scoring to each finding considering:
-    duplicate probability, exploitability, business impact,
-    program context, and novelty. Outputs a ranked list of
-    findings worth reporting.
-    """
 
     def __init__(self, program_context: dict[str, Any] | None = None):
         self.program_context = program_context or {}

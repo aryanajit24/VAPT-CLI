@@ -1,4 +1,3 @@
-"""Configuration management with encrypted storage."""
 
 from __future__ import annotations
 
@@ -15,16 +14,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-# Where all VAPT config files live.  Created automatically on first run.
 CONFIG_DIR = Path.home() / ".vapt"
 CONFIG_FILE = CONFIG_DIR / "config.json"
-ENC_FILE = CONFIG_DIR / "config.enc"   # encrypted API keys (AES-256-GCM)
-KEY_FILE = CONFIG_DIR / ".key"         # encryption key (chmod 0600)
+ENC_FILE = CONFIG_DIR / "config.enc"
+KEY_FILE = CONFIG_DIR / ".key"
 
 console = Console()
 
-# Each entry describes one API key the tool can use.  The setup wizard
-# iterates over this list, prompts the user, and validates live.
 API_KEY_DEFINITIONS: list[dict] = [
     {
         "name": "SHODAN_API_KEY",
@@ -64,7 +60,7 @@ API_KEY_DEFINITIONS: list[dict] = [
         "label": "NVD (National Vulnerability Database)",
         "purpose": "CVE lookups with full CVSS data from NIST",
         "url": "https://nvd.nist.gov/developers/request-an-api-key",
-        "validator": None,  # NVD API key not easily testable without a query
+        "validator": None,
     },
     {
         "name": "SENDGRID_API_KEY",
@@ -78,14 +74,7 @@ API_KEY_DEFINITIONS: list[dict] = [
 ]
 
 
-# AES-256-GCM provides both confidentiality and integrity.  The 12-byte
-# nonce is prepended to the ciphertext so we can decrypt in one step.
-
 def _get_or_create_key() -> bytes:
-    """Return the AES-256 encryption key, creating it on first run.
-
-    The key file is chmod 0600 so only the current user can read it.
-    """
     CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     if KEY_FILE.exists():
         return KEY_FILE.read_bytes()
@@ -96,7 +85,6 @@ def _get_or_create_key() -> bytes:
 
 
 def _encrypt(plaintext: str) -> str:
-    """Encrypt a string value using AES-256-GCM and return base64-encoded ciphertext."""
     key = _get_or_create_key()
     aesgcm = AESGCM(key)
     nonce = os.urandom(12)
@@ -105,7 +93,6 @@ def _encrypt(plaintext: str) -> str:
 
 
 def _decrypt(token: str) -> str:
-    """Decrypt a value previously encrypted by _encrypt."""
     key = _get_or_create_key()
     aesgcm = AESGCM(key)
     raw = base64.b64decode(token)
@@ -114,7 +101,6 @@ def _decrypt(token: str) -> str:
 
 
 def _load_enc() -> dict[str, Any]:
-    """Load encrypted config (API keys) from config.enc."""
     if not ENC_FILE.exists():
         return {}
     try:
@@ -124,14 +110,12 @@ def _load_enc() -> dict[str, Any]:
 
 
 def _save_enc(data: dict[str, Any]) -> None:
-    """Write encrypted config to config.enc."""
     CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     ENC_FILE.write_text(_encrypt(json.dumps(data, indent=2)))
     ENC_FILE.chmod(0o600)
 
 
 def load_config() -> dict[str, Any]:
-    """Load non-sensitive configuration from disk. Returns empty dict if not found."""
     if not CONFIG_FILE.exists():
         return {}
     try:
@@ -141,19 +125,12 @@ def load_config() -> dict[str, Any]:
 
 
 def save_config(cfg: dict[str, Any]) -> None:
-    """Persist non-sensitive configuration to disk."""
     CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
     CONFIG_FILE.chmod(0o600)
 
 
 def get_api_key(name: str) -> str | None:
-    """Retrieve and decrypt an API key by its internal name.
-
-    Returns None if the key isn't configured or decryption fails
-    (e.g. the .key file was regenerated).  Callers should always
-    handle None gracefully.
-    """
     enc_data = _load_enc()
     encrypted = enc_data.get("api_keys", {}).get(name)
     if encrypted is None:
@@ -165,18 +142,12 @@ def get_api_key(name: str) -> str | None:
 
 
 def set_api_key(name: str, value: str) -> None:
-    """Encrypt and store an API key by its internal name."""
     enc_data = _load_enc()
     enc_data.setdefault("api_keys", {})[name] = _encrypt(value)
     _save_enc(enc_data)
 
 
-# Each validator hits a lightweight endpoint on the provider's API
-# to confirm the key is active.  This gives immediate feedback in
-# the setup wizard rather than failing silently during a scan.
-
 def _validate_shodan(key: str) -> tuple[bool, str]:
-    """Verify the Shodan API key with a lightweight account info call."""
     try:
         r = requests.get(
             f"https://api.shodan.io/api-info?key={key}", timeout=8
@@ -189,7 +160,6 @@ def _validate_shodan(key: str) -> tuple[bool, str]:
 
 
 def _validate_virustotal(key: str) -> tuple[bool, str]:
-    """Verify the VirusTotal API key with a lightweight ping call."""
     try:
         r = requests.get(
             "https://www.virustotal.com/api/v3/users/me",
@@ -204,7 +174,6 @@ def _validate_virustotal(key: str) -> tuple[bool, str]:
 
 
 def _validate_securitytrails(key: str) -> tuple[bool, str]:
-    """Verify the SecurityTrails API key with a ping call."""
     try:
         r = requests.get(
             "https://api.securitytrails.com/v1/ping",
@@ -219,7 +188,6 @@ def _validate_securitytrails(key: str) -> tuple[bool, str]:
 
 
 def _validate_hunter(key: str) -> tuple[bool, str]:
-    """Verify the Hunter.io API key with an account call."""
     try:
         r = requests.get(
             f"https://api.hunter.io/v2/account?api_key={key}", timeout=8
@@ -232,7 +200,6 @@ def _validate_hunter(key: str) -> tuple[bool, str]:
 
 
 def _validate_sendgrid(key: str) -> tuple[bool, str]:
-    """Verify the SendGrid API key."""
     try:
         r = requests.get(
             "https://api.sendgrid.com/v3/user/account",
@@ -255,16 +222,7 @@ _VALIDATORS: dict[str, Any] = {
 }
 
 
-# The wizard runs on first use (or `vapt config setup`).  It walks
-# users through each API key, validates live, and saves encrypted.
-
-def run_setup_wizard() -> None:  # noqa: C901
-    """Interactive guided configuration wizard.
-
-    Prompts for general settings (output dir, threads, timeouts) then
-    walks through each API key, validating against the provider before
-    encrypting and saving.
-    """
+def run_setup_wizard() -> None:
     console.print(
         Panel.fit(
             "[bold cyan]VAPT CLI — First-Run Configuration Wizard[/bold cyan]\n"
@@ -328,7 +286,6 @@ def run_setup_wizard() -> None:  # noqa: C901
             console.print(f"  [dim]Skipped {label}.[/dim]\n")
             continue
 
-        # Validate if a validator is defined
         validator_name = key_def.get("validator")
         if validator_name and validator_name in _VALIDATORS:
             console.print(f"  [dim]Validating {label} key…[/dim]")
@@ -360,7 +317,6 @@ app = typer.Typer(help="Manage VAPT CLI configuration.")
 
 @app.command("show")
 def cmd_show() -> None:
-    """Display current configuration (keys are masked)."""
     cfg = load_config()
     enc_data = _load_enc()
     if not cfg and not enc_data:
@@ -374,13 +330,11 @@ def cmd_show() -> None:
 
 @app.command("setup")
 def cmd_setup() -> None:
-    """Run the interactive setup wizard."""
     run_setup_wizard()
 
 
 @app.command("set")
 def cmd_set(key: str = typer.Argument(...), value: str = typer.Argument(...)) -> None:
-    """Set a configuration value: vapt config set <key> <value>."""
     cfg = load_config()
     cfg[key] = value
     save_config(cfg)
@@ -392,6 +346,5 @@ def cmd_set_key(
     name: str = typer.Argument(..., help="Internal key name e.g. shodan, virustotal"),
     value: str = typer.Argument(...),
 ) -> None:
-    """Update a single API key: vapt config set-key shodan <KEY>."""
     set_api_key(name, value)
     console.print(f"[green]API key '{name}' updated (encrypted).[/green]")

@@ -1,4 +1,3 @@
-"""Headless browser crawl engine with form discovery and JS rendering."""
 
 from __future__ import annotations
 
@@ -11,7 +10,6 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 @dataclass
 class CrawlForm:
-    """Discovered HTML form."""
 
     url: str
     action: str
@@ -23,7 +21,6 @@ class CrawlForm:
 
 @dataclass
 class CrawlEndpoint:
-    """Discovered API endpoint from JS analysis."""
 
     url: str
     method: str = "GET"
@@ -33,7 +30,6 @@ class CrawlEndpoint:
 
 @dataclass
 class CrawlResult:
-    """Complete crawl results."""
 
     target: str = ""
     pages_crawled: int = 0
@@ -88,7 +84,6 @@ _TECH_SIGNATURES = {
 
 
 class Crawler:
-    """Headless browser crawler with JS rendering and form discovery."""
 
     def __init__(
         self,
@@ -374,7 +369,6 @@ class Crawler:
 
 
 class CrawlerLight:
-    """Lightweight requests-based crawler (no browser required)."""
 
     def __init__(
         self,

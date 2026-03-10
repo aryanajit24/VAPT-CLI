@@ -1,4 +1,3 @@
-"""Mobile application security scanner for Android APK and iOS IPA."""
 
 from __future__ import annotations
 
@@ -47,19 +46,12 @@ FP_INDICATORS = [
 
 
 class MobileScanner:
-    """Mobile application security scanner (Android APK & iOS IPA)."""
 
     def __init__(self, timeout: int = 30) -> None:
         self.timeout = timeout
         self.findings: list[dict] = []
 
     def run(self, target: str) -> dict[str, Any]:
-        """
-        Run mobile security scan on APK or IPA file.
-
-        Args:
-            target: Path to APK or IPA file
-        """
         target_path = Path(target)
         if not target_path.exists():
             return {"findings": [], "error": f"File not found: {target}"}
@@ -75,7 +67,6 @@ class MobileScanner:
         return {"findings": self.findings}
 
     def _scan_android(self, apk_path: Path) -> None:
-        """Full static analysis of Android APK."""
         tmpdir = tempfile.mkdtemp(prefix="vapt_apk_")
         try:
             with zipfile.ZipFile(apk_path, "r") as zf:
@@ -107,7 +98,6 @@ class MobileScanner:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _parse_android_manifest(self, extracted: Path, apk_path: Path) -> ElementTree.Element | None:
-        """Parse AndroidManifest.xml from extracted APK."""
         manifest_path = extracted / "AndroidManifest.xml"
         if not manifest_path.exists():
             return None
@@ -127,7 +117,7 @@ class MobileScanner:
                     )
                     if result.returncode == 0:
                         self._parse_aapt_manifest(result.stdout, apk_path)
-                        return None  # Already processed via aapt
+                        return None
                 except (subprocess.SubprocessError, OSError):
                     pass
 
@@ -148,7 +138,6 @@ class MobileScanner:
         return None
 
     def _parse_aapt_manifest(self, output: str, apk_path: Path) -> None:
-        """Parse aapt dump output for security-relevant attributes."""
         lines = output.lower()
 
         if "android:debuggable" in lines and 'true' in lines.split("debuggable")[1][:50]:
@@ -176,7 +165,6 @@ class MobileScanner:
             ))
 
     def _check_exported_components(self, root: ElementTree.Element, apk_path: Path) -> None:
-        """Check for exported Activities, Services, Receivers, Providers."""
         ns = {"android": "http://schemas.android.com/apk/res/android"}
         component_types = ["activity", "service", "receiver", "provider"]
         exported = []
@@ -186,7 +174,6 @@ class MobileScanner:
                 name = comp.get(f"{{{ns['android']}}}name", comp.get("android:name", ""))
                 is_exported = comp.get(f"{{{ns['android']}}}exported", comp.get("android:exported", ""))
 
-                # Components with intent-filters are exported by default (pre-Android 12)
                 has_intent_filter = comp.find("intent-filter") is not None
 
                 if is_exported == "true" or (has_intent_filter and is_exported != "false"):
@@ -204,7 +191,6 @@ class MobileScanner:
             ))
 
     def _check_backup_enabled(self, root: ElementTree.Element, apk_path: Path) -> None:
-        """Check if app allows backup."""
         ns = {"android": "http://schemas.android.com/apk/res/android"}
         app = root.find("application")
         if app is not None:
@@ -221,7 +207,6 @@ class MobileScanner:
                 ))
 
     def _check_debuggable(self, root: ElementTree.Element, apk_path: Path) -> None:
-        """Check if app is debuggable."""
         ns = {"android": "http://schemas.android.com/apk/res/android"}
         app = root.find("application")
         if app is not None:
@@ -238,7 +223,6 @@ class MobileScanner:
                 ))
 
     def _check_cleartext_traffic(self, root: ElementTree.Element, apk_path: Path) -> None:
-        """Check for cleartext (HTTP) traffic allowance."""
         ns = {"android": "http://schemas.android.com/apk/res/android"}
         app = root.find("application")
         if app is not None:
@@ -258,7 +242,6 @@ class MobileScanner:
                 ))
 
     def _check_deeplinks(self, root: ElementTree.Element, apk_path: Path) -> None:
-        """Extract and analyze deeplink schemes."""
         ns = {"android": "http://schemas.android.com/apk/res/android"}
         deeplinks = []
 
@@ -284,7 +267,6 @@ class MobileScanner:
             ))
 
     def _check_permissions(self, root: ElementTree.Element, apk_path: Path) -> None:
-        """Check for dangerous permissions."""
         ns = {"android": "http://schemas.android.com/apk/res/android"}
         dangerous_perms = {
             "CAMERA", "RECORD_AUDIO", "ACCESS_FINE_LOCATION",
@@ -312,7 +294,6 @@ class MobileScanner:
             ))
 
     def _check_network_security_config(self, extracted: Path, apk_path: Path) -> None:
-        """Check network_security_config.xml for insecure settings."""
         config_path = extracted / "res" / "xml" / "network_security_config.xml"
         if not config_path.exists():
             return
@@ -341,7 +322,6 @@ class MobileScanner:
             pass
 
     def _check_webview_android(self, source_dir: Path, apk_path: Path) -> None:
-        """Check for insecure WebView patterns in decompiled source."""
         dangerous_patterns = [
             (r"\.addJavascriptInterface\(", "addJavascriptInterface — JS-to-native bridge"),
             (r"setJavaScriptEnabled\(\s*true\s*\)", "JavaScript enabled in WebView"),
@@ -376,7 +356,6 @@ class MobileScanner:
             ))
 
     def _decompile_with_jadx(self, apk_path: Path, tmpdir: str) -> Path | None:
-        """Decompile APK to Java source with jadx."""
         if not shutil.which("jadx"):
             return None
 
@@ -393,7 +372,6 @@ class MobileScanner:
         return None
 
     def _scan_ios(self, ipa_path: Path) -> None:
-        """Full static analysis of iOS IPA."""
         tmpdir = tempfile.mkdtemp(prefix="vapt_ipa_")
         try:
             with zipfile.ZipFile(ipa_path, "r") as zf:
@@ -421,7 +399,6 @@ class MobileScanner:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _check_info_plist(self, app_dir: Path, ipa_path: Path) -> None:
-        """Analyze Info.plist for security issues."""
         plist_path = app_dir / "Info.plist"
         if not plist_path.exists():
             return
@@ -475,7 +452,6 @@ class MobileScanner:
             pass
 
     def _check_binary_strings(self, app_dir: Path, ipa_path: Path) -> None:
-        """Run strings on binary to find secrets."""
         app_name = app_dir.stem
         binary_path = app_dir / app_name
         if not binary_path.exists():
@@ -502,7 +478,6 @@ class MobileScanner:
                 pass
 
     def _check_entitlements(self, app_dir: Path, ipa_path: Path) -> None:
-        """Check for dangerous entitlements."""
         provision = app_dir / "embedded.mobileprovision"
         if provision.exists():
             try:
@@ -530,7 +505,6 @@ class MobileScanner:
                 pass
 
     def _search_secrets_in_dir(self, directory: Path, target_path: Path, platform: str) -> None:
-        """Recursively search for secrets in all text files."""
         text_extensions = {
             ".java", ".kt", ".swift", ".m", ".h", ".xml", ".json",
             ".plist", ".yaml", ".yml", ".properties", ".gradle",
@@ -552,7 +526,6 @@ class MobileScanner:
     def _scan_text_for_secrets(
         self, content: str, source_file: str, target_path: Path, platform: str,
     ) -> None:
-        """Scan text content for hardcoded secrets."""
         vuln_id = "ANDROID-004" if platform == "android" else "IOS-002"
         category = f"mobile_{platform}"
 
@@ -595,7 +568,6 @@ class MobileScanner:
         category: str,
         remediation: str = "",
     ) -> dict:
-        """Build a standardized finding dict."""
         cvss_map = {
             "critical": 9.5, "high": 7.5, "medium": 5.3, "low": 3.1, "info": 0.0,
         }

@@ -1,8 +1,8 @@
-"""TLS/SSL configuration scanner."""
 
 from __future__ import annotations
 
 import hashlib
+import re
 import socket
 import ssl
 from datetime import datetime, timezone
@@ -18,7 +18,6 @@ WEAK_CIPHERS = {
     "anon", "MD5",
 }
 
-# Protocols to test (in order of preference)
 PROTOCOLS_TO_TEST = [
     ("SSLv3",  ssl.PROTOCOL_TLS_CLIENT, "SSLv3"),
     ("TLSv1",  ssl.PROTOCOL_TLS_CLIENT, "TLSv1"),
@@ -29,13 +28,11 @@ PROTOCOLS_TO_TEST = [
 
 
 class SSLScanner:
-    """Deep SSL/TLS analysis — certificates, protocols, ciphers, HSTS."""
 
     def __init__(self, timeout: int = 10) -> None:
         self.timeout = timeout
 
     def run(self, target: str) -> dict[str, Any]:
-        """Run all SSL/TLS checks against the target."""
         target = sanitize_target(target)
         host = target.split(":")[0] if ":" in target else target
         port = 443
@@ -65,7 +62,6 @@ class SSLScanner:
 
 
     def _get_certificate(self, host: str, port: int = 443) -> dict[str, Any]:
-        """Retrieve the server's TLS certificate and extract metadata."""
         try:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
@@ -80,7 +76,6 @@ class SSLScanner:
             if not cert_dict and not cert_bin:
                 return {}
 
-            # Parse cert fields
             subject = dict(x[0] for x in cert_dict.get("subject", ()))
             issuer = dict(x[0] for x in cert_dict.get("issuer", ()))
             san_list = []
@@ -90,7 +85,6 @@ class SSLScanner:
             not_before = cert_dict.get("notBefore", "")
             not_after = cert_dict.get("notAfter", "")
 
-            # Parse dates
             date_fmt = "%b %d %H:%M:%S %Y %Z"
             try:
                 nb = datetime.strptime(not_before, date_fmt).replace(tzinfo=timezone.utc)
@@ -101,7 +95,6 @@ class SSLScanner:
             except Exception:
                 na = None
 
-            # Fingerprint
             sha256 = hashlib.sha256(cert_bin).hexdigest() if cert_bin else ""
 
             return {
@@ -127,10 +120,8 @@ class SSLScanner:
 
 
     def _analyse_certificate(self, cert: dict, host: str) -> list[dict]:
-        """Inspect certificate for common weaknesses."""
         findings: list[dict] = []
 
-        # Expiry
         days = cert.get("days_until_expiry")
         if days is not None:
             if days < 0:
@@ -152,7 +143,6 @@ class SSLScanner:
                     "medium", 5.0,
                 ))
 
-        # Self-signed
         issuer_cn = cert.get("issuer_cn", "")
         cn = cert.get("common_name", "")
         if issuer_cn and cn and issuer_cn == cn:
@@ -163,7 +153,6 @@ class SSLScanner:
                 "high", 7.4,
             ))
 
-        # Hostname mismatch
         san_list = cert.get("san", [])
         all_names = set(san_list) | {cn}
         host_matched = False
@@ -171,7 +160,6 @@ class SSLScanner:
             if name == host:
                 host_matched = True
                 break
-            # Wildcard matching
             if name.startswith("*.") and host.endswith(name[1:]):
                 host_matched = True
                 break
@@ -183,7 +171,6 @@ class SSLScanner:
                 "high", 7.4,
             ))
 
-        # Weak signature algorithm
         sig_alg = cert.get("signature_algorithm", "").lower()
         if "md5" in sig_alg or "md2" in sig_alg:
             findings.append(self._f(
@@ -198,7 +185,6 @@ class SSLScanner:
                 "high", 7.5,
             ))
 
-        # Wildcard cert (informational)
         if cn and cn.startswith("*."):
             findings.append(self._f(
                 "SSL-008", "ssl_tls", "Wildcard certificate in use",
@@ -211,7 +197,6 @@ class SSLScanner:
 
 
     def _test_protocols(self, host: str, port: int = 443) -> list[dict]:
-        """Test which TLS/SSL protocol versions the server accepts."""
         results: list[dict] = []
 
         for name, _, _ in PROTOCOLS_TO_TEST:
@@ -221,13 +206,11 @@ class SSLScanner:
         return results
 
     def _try_protocol(self, host: str, port: int, proto_name: str) -> bool:
-        """Attempt to connect using a specific TLS/SSL protocol version."""
         try:
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-            # Set min/max to force a specific version
             version_map = {
                 "SSLv3": (ssl.TLSVersion.SSLv3, ssl.TLSVersion.SSLv3),
                 "TLSv1": (ssl.TLSVersion.TLSv1, ssl.TLSVersion.TLSv1),
@@ -253,7 +236,6 @@ class SSLScanner:
             return False
 
     def _analyse_protocols(self, results: list[dict]) -> list[dict]:
-        """Flag deprecated protocols that the server still accepts."""
         findings: list[dict] = []
         deprecated = {"SSLv3", "TLSv1", "TLSv1.1"}
 
@@ -272,7 +254,6 @@ class SSLScanner:
         has_tls12 = any(p["accepted"] and p["protocol"] == "TLSv1.2" for p in results)
         has_tls13 = any(p["accepted"] and p["protocol"] == "TLSv1.3" for p in results)
         if not has_tls12 and not has_tls13:
-            # No modern protocol — might just mean we couldn't connect
             accepts_any = any(p["accepted"] for p in results)
             if accepts_any:
                 findings.append(self._f(
@@ -286,7 +267,6 @@ class SSLScanner:
 
 
     def _check_weak_ciphers(self, host: str, port: int = 443) -> list[dict]:
-        """Check if the server accepts known weak cipher suites."""
         findings: list[dict] = []
         try:
             ctx = ssl.create_default_context()
@@ -297,7 +277,6 @@ class SSLScanner:
                 with ctx.wrap_socket(sock, server_hostname=host) as tls:
                     cipher_name, _protocol, bits = tls.cipher()
 
-                    # Check for weak key length
                     if bits and bits < 128:
                         findings.append(self._f(
                             "SSL-006", "ssl_tls",
@@ -307,7 +286,6 @@ class SSLScanner:
                             "high", 7.5,
                         ))
 
-                    # Check cipher name for known weak algorithms
                     for weak in WEAK_CIPHERS:
                         if weak.upper() in cipher_name.upper():
                             findings.append(self._f(
@@ -326,7 +304,6 @@ class SSLScanner:
 
 
     def _check_hsts(self, host: str) -> list[dict]:
-        """Check if the target enforces HTTP Strict Transport Security."""
         findings: list[dict] = []
         try:
             resp = requests.get(
@@ -345,12 +322,10 @@ class SSLScanner:
                     "medium", 5.4,
                 ))
             else:
-                # Check for short max-age
-                import re
                 m = re.search(r"max-age=(\d+)", hsts)
                 if m:
                     max_age = int(m.group(1))
-                    if max_age < 15768000:  # ~6 months
+                    if max_age < 15768000:
                         findings.append(self._f(
                             "SSL-007", "ssl_tls",
                             f"HSTS max-age too short ({max_age}s)",

@@ -1,15 +1,11 @@
-"""Safety profiles for controlled scanning."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 
-# Safety Profile dataclass
-
 @dataclass
 class SafetyProfile:
-    """Defines exactly which attack types are allowed."""
     name: str
     description: str
 
@@ -37,8 +33,6 @@ class SafetyProfile:
 
     excluded_categories: list[str] = field(default_factory=list)
 
-
-# Pre-built safety profiles
 
 SAFETY_PROFILES: dict[str, SafetyProfile] = {
 
@@ -99,26 +93,26 @@ SAFETY_PROFILES: dict[str, SafetyProfile] = {
     "meesho": SafetyProfile(
         name="Meesho (HackerOne)",
         description="Tailored for Meesho program rules. Very restrictive.",
-        allow_port_scan=False,        # Web-only targets, no infra
-        allow_default_creds=False,    # "Do not use credentials you may have found"
-        allow_race_conditions=False,  # "Testing rate limits on order flow is not allowed"
-        allow_http_smuggling=False,   # Too risky for production
-        allow_cache_poisoning=False,  # "Cache poisoning without valid PoC" = OOS
-        allow_deserialization=False,  # Could execute code on server
-        allow_time_blind_sqli=True,   # SQLi is in scope
-        allow_xxe=False,              # Could read internal files
-        allow_ssrf=True,              # SSRF is in scope (with PoC)
-        allow_brute_force=False,      # "Brute-force or rate-limiting" = OOS
-        allow_dos_tests=False,        # Explicitly forbidden
-        allow_mfa_bypass=False,       # Could lock test accounts
-        allow_cloud_write=False,      # "Cloud buckets without critical data" = OOS
-        allow_cloud_scan=False,       # Cloud checks not relevant
-        allow_command_exec=False,     # Too destructive
-        allow_file_write=False,       # Too destructive
-        max_requests_per_second=2.0,  # "Automated tools that could affect production"
-        max_concurrent_threads=1,     # Single-threaded to be safe
-        max_payloads_per_param=10,    # Minimal payload set
-        max_fuzz_paths=50,            # Limited directory brute-force
+        allow_port_scan=False,
+        allow_default_creds=False,
+        allow_race_conditions=False,
+        allow_http_smuggling=False,
+        allow_cache_poisoning=False,
+        allow_deserialization=False,
+        allow_time_blind_sqli=True,
+        allow_xxe=False,
+        allow_ssrf=True,
+        allow_brute_force=False,
+        allow_dos_tests=False,
+        allow_mfa_bypass=False,
+        allow_cloud_write=False,
+        allow_cloud_scan=False,
+        allow_command_exec=False,
+        allow_file_write=False,
+        max_requests_per_second=2.0,
+        max_concurrent_threads=1,
+        max_payloads_per_param=10,
+        max_fuzz_paths=50,
         excluded_categories=[
             "dos", "ddos", "brute_force", "rate_limiting",
             "clickjacking", "cache_deception",
@@ -138,23 +132,23 @@ SAFETY_PROFILES: dict[str, SafetyProfile] = {
     "optus": SafetyProfile(
         name="Optus (Bugcrowd)",
         description="Tailored for Optus. Infrastructure testing allowed.",
-        allow_port_scan=True,         # Infrastructure targets are in scope
-        allow_default_creds=False,    # "Do not use credentials you may have found"
-        allow_race_conditions=False,  # Be safe — could look like DDoS
-        allow_http_smuggling=False,   # Could corrupt shared proxies / Akamai
-        allow_cache_poisoning=False,  # Could affect other users via Akamai
-        allow_deserialization=False,  # Too risky on production
-        allow_time_blind_sqli=True,   # Standard web testing
-        allow_xxe=False,              # Could access internal systems
-        allow_ssrf=True,              # Web testing is in scope
-        allow_brute_force=False,      # Could lock accounts
-        allow_dos_tests=False,        # "DDoS not allowed without permission"
-        allow_mfa_bypass=False,       # Could affect real users
-        allow_cloud_write=False,      # Read-only is fine
-        allow_cloud_scan=True,        # Cloud check is useful
-        allow_command_exec=False,     # Too destructive
-        allow_file_write=False,       # Too destructive
-        max_requests_per_second=3.0,  # "Be mindful with rate limits"
+        allow_port_scan=True,
+        allow_default_creds=False,
+        allow_race_conditions=False,
+        allow_http_smuggling=False,
+        allow_cache_poisoning=False,
+        allow_deserialization=False,
+        allow_time_blind_sqli=True,
+        allow_xxe=False,
+        allow_ssrf=True,
+        allow_brute_force=False,
+        allow_dos_tests=False,
+        allow_mfa_bypass=False,
+        allow_cloud_write=False,
+        allow_cloud_scan=True,
+        allow_command_exec=False,
+        allow_file_write=False,
+        max_requests_per_second=3.0,
         max_concurrent_threads=2,
         max_payloads_per_param=15,
         max_fuzz_paths=100,
@@ -166,7 +160,7 @@ SAFETY_PROFILES: dict[str, SafetyProfile] = {
     "hackerone": SafetyProfile(
         name="HackerOne (General)",
         description="Conservative profile for any HackerOne program.",
-        allow_port_scan=False,        # Most H1 programs are web-only
+        allow_port_scan=False,
         allow_default_creds=False,
         allow_race_conditions=False,
         allow_http_smuggling=False,
@@ -195,7 +189,7 @@ SAFETY_PROFILES: dict[str, SafetyProfile] = {
     "bugcrowd": SafetyProfile(
         name="Bugcrowd (General)",
         description="Conservative profile for any Bugcrowd program.",
-        allow_port_scan=True,         # Bugcrowd often includes infra
+        allow_port_scan=True,
         allow_default_creds=False,
         allow_race_conditions=False,
         allow_http_smuggling=False,
@@ -223,10 +217,7 @@ SAFETY_PROFILES: dict[str, SafetyProfile] = {
 }
 
 
-# Helper functions
-
 def get_safety_profile(name: str) -> SafetyProfile:
-    """Get a safety profile by name. Raises ValueError if unknown."""
     profile = SAFETY_PROFILES.get(name.lower())
     if not profile:
         available = ", ".join(SAFETY_PROFILES.keys())
@@ -235,13 +226,7 @@ def get_safety_profile(name: str) -> SafetyProfile:
 
 
 def build_safety_config(profile: SafetyProfile) -> dict:
-    """Convert a SafetyProfile into a flat dict that scanners consume.
-
-    Every scanner's ``__init__`` accepts ``safety_config`` — this dict tells
-    each scanner which payload categories to skip and what limits to respect.
-    """
     return {
-        # Payload-level gates (scanners check these before each test)
         "skip_time_blind_sqli": not profile.allow_time_blind_sqli,
         "skip_xxe": not profile.allow_xxe,
         "skip_command_exec": not profile.allow_command_exec,
@@ -252,8 +237,7 @@ def build_safety_config(profile: SafetyProfile) -> dict:
         "skip_default_creds": not profile.allow_default_creds,
         "skip_file_write": not profile.allow_file_write,
         "skip_ssrf": not profile.allow_ssrf,
-        "skip_rate_limit_test": not profile.allow_dos_tests,  # rapid-fire test
-        # Rate / volume limits
+        "skip_rate_limit_test": not profile.allow_dos_tests,
         "max_payloads_per_param": profile.max_payloads_per_param,
         "max_fuzz_paths": profile.max_fuzz_paths,
         "max_requests_per_second": profile.max_requests_per_second,
@@ -265,13 +249,6 @@ def filter_findings_by_safety(
     findings: list[dict],
     profile: SafetyProfile,
 ) -> tuple[list[dict], int]:
-    """Remove findings whose category is blocked by the safety profile.
-
-    This is a SECOND LAYER of defence — catches anything a scanner might
-    have produced despite safety_config (e.g. from plugins or deep-mode).
-
-    Returns (filtered_findings, count_removed).
-    """
     if not profile.excluded_categories:
         return findings, 0
 
@@ -291,7 +268,6 @@ def filter_findings_by_safety(
 
 
 def format_safety_summary(profile: SafetyProfile) -> str:
-    """Return a Rich-compatible summary string for display."""
     lines = [
         f"[bold]{profile.description}[/bold]",
         f"Rate limit: {profile.max_requests_per_second} req/s  |  "

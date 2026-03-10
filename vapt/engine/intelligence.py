@@ -1,4 +1,3 @@
-"""Intelligence engine for finding analysis and severity adjustment."""
 
 from __future__ import annotations
 
@@ -7,11 +6,7 @@ from typing import Any
 
 from vapt.engine.mega_kb import (
     MEGA_KB,
-    SEVERITY_RULES,
     FALSE_POSITIVE_RULES,
-    REPORT_RULES,
-    get_vuln_by_id,
-    get_severity_rules,
 )
 
 
@@ -32,7 +27,6 @@ CVSS_RANGES = {
 }
 
 ATTACK_CHAINS = [
-    # Auth chains
     {
         "name": "Complete Account Takeover Chain",
         "requires": [
@@ -158,14 +152,12 @@ PAYMENT_KEYWORDS = [
 
 
 class IntelligenceEngine:
-    """Deep analysis engine that thinks like an elite bounty hunter."""
 
     def __init__(self) -> None:
         self._kb_cache: dict[str, dict] = {}
         self._build_kb_index()
 
     def _build_kb_index(self) -> None:
-        """Index the mega KB for fast lookups."""
         for entry in MEGA_KB:
             self._kb_cache[entry["vuln_id"]] = entry
 
@@ -175,17 +167,6 @@ class IntelligenceEngine:
         findings: list[dict[str, Any]],
         target_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """
-        Full intelligence analysis pipeline.
-        
-        Returns:
-            {
-                "findings": enriched findings list,
-                "chains": detected attack chains,
-                "risk_summary": overall risk assessment,
-                "recommendations": prioritized next steps,
-            }
-        """
         context = target_context or {}
 
         enriched = [self._enrich_finding(f) for f in findings]
@@ -211,13 +192,11 @@ class IntelligenceEngine:
 
 
     def _enrich_finding(self, finding: dict[str, Any]) -> dict[str, Any]:
-        """Enrich a finding with mega KB data."""
         enriched = dict(finding)
         vuln_id = finding.get("vuln_id", "")
 
         kb_entry = self._kb_cache.get(vuln_id)
         if kb_entry:
-            # Scanner data wins on conflicts
             for key in ("cwe", "owasp", "detection", "validation", "impact",
                         "remediation", "is_critical_when", "is_not_critical_when"):
                 if key in kb_entry and key not in enriched:
@@ -234,13 +213,6 @@ class IntelligenceEngine:
     def _analyze_severity(
         self, finding: dict[str, Any], context: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Analyze finding severity with deep contextual understanding.
-        
-        This is what separates a script kiddie from an elite hunter.
-        We don't just check severity labels — we analyze WHY something
-        is critical or not.
-        """
         enriched = dict(finding)
         severity = (finding.get("severity") or "info").lower()
         evidence = (finding.get("evidence") or "").lower()
@@ -257,7 +229,6 @@ class IntelligenceEngine:
             enriched["severity_reason"] = upgrade_reason
             enriched["severity_adjusted"] = True
 
-        # Scanner may have over-classified
         downgrade_reason = self._check_severity_downgrade(
             finding, evidence, title, url, context,
         )
@@ -265,7 +236,6 @@ class IntelligenceEngine:
             enriched["original_severity"] = severity
             enriched["severity_reason"] = downgrade_reason
             enriched["severity_adjusted"] = True
-            # Only downgrade if we have strong reason
             if severity == "critical":
                 enriched["severity"] = "high"
             elif severity == "high":
@@ -293,7 +263,6 @@ class IntelligenceEngine:
         url: str,
         context: dict,
     ) -> str | None:
-        """Check if a finding deserves severity upgrade."""
         severity = (finding.get("severity") or "info").lower()
 
         for pattern in CRITICAL_IMPACT_KEYWORDS:
@@ -328,7 +297,6 @@ class IntelligenceEngine:
         url: str,
         context: dict,
     ) -> str | None:
-        """Check if a finding's severity should be downgraded."""
         severity = (finding.get("severity") or "info").lower()
         vuln_id = finding.get("vuln_id", "")
 
@@ -367,7 +335,6 @@ class IntelligenceEngine:
     def _eliminate_false_positives(
         self, findings: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Remove false positives using mega KB rules."""
         confirmed = []
 
         for finding in findings:
@@ -382,7 +349,6 @@ class IntelligenceEngine:
     def _is_false_positive(
         self, finding: dict[str, Any], fp_rules: dict,
     ) -> bool:
-        """Check if a finding matches known false positive patterns."""
         category = (finding.get("category") or "").lower()
         evidence = (finding.get("evidence") or "").lower()
         title = (finding.get("title") or "").lower()
@@ -402,7 +368,6 @@ class IntelligenceEngine:
         return False
 
     def _is_generic_fp(self, finding: dict[str, Any]) -> bool:
-        """Check for common generic false positive patterns."""
         evidence = (finding.get("evidence") or "").lower()
         confidence = finding.get("confidence", 0.5)
 
@@ -429,7 +394,6 @@ class IntelligenceEngine:
         findings: list[dict[str, Any]],
         context: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Detect multi-step attack chains from individual findings."""
         chains = []
 
         for chain_def in ATTACK_CHAINS:
@@ -452,7 +416,6 @@ class IntelligenceEngine:
         findings: list[dict[str, Any]],
         context: dict[str, Any],
     ) -> list[dict[str, Any]] | None:
-        """Check if findings match a chain definition."""
         requirements = chain_def.get("requires", [])
         all_matched = []
 
@@ -465,7 +428,7 @@ class IntelligenceEngine:
                     matched = True
 
             if not matched and not req.get("optional"):
-                return None  # Required component missing
+                return None
 
         conditions = chain_def.get("conditions", [])
         for condition in conditions:
@@ -487,7 +450,6 @@ class IntelligenceEngine:
     def _finding_matches_requirement(
         self, finding: dict[str, Any], req: dict,
     ) -> bool:
-        """Check if a single finding matches a chain requirement."""
         for key, pattern in req.items():
             if key == "any":
                 continue
@@ -498,7 +460,6 @@ class IntelligenceEngine:
                     return False
 
             elif key == "vuln_match":
-                # Check against vuln_id, title, and category
                 combined = " ".join([
                     finding.get("vuln_id", ""),
                     finding.get("title", ""),
@@ -516,7 +477,6 @@ class IntelligenceEngine:
 
 
     def _assess_impact(self, finding: dict[str, Any]) -> dict[str, Any]:
-        """Assess the real-world business impact of a finding."""
         enriched = dict(finding)
         evidence = (finding.get("evidence") or "").lower()
         title = (finding.get("title") or "").lower()
@@ -561,7 +521,6 @@ class IntelligenceEngine:
         findings: list[dict[str, Any]],
         chains: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Generate an overall risk summary."""
         severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
         for f in findings:
             sev = (f.get("severity") or "info").lower()
@@ -576,7 +535,6 @@ class IntelligenceEngine:
             + severity_counts["medium"] * 4
             + severity_counts["low"] * 1
         )
-        # Chains compound risk significantly
         raw_score += chain_count * 15
         overall_score = min(raw_score, 100)
 
@@ -624,10 +582,8 @@ class IntelligenceEngine:
         findings: list[dict[str, Any]],
         chains: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Generate prioritized remediation recommendations."""
         recs = []
 
-        # Priority 1: Attack chains
         for chain in chains:
             recs.append({
                 "priority": 1,
@@ -640,7 +596,6 @@ class IntelligenceEngine:
                 ],
             })
 
-        # Priority 2: Critical findings
         critical = [f for f in findings if f.get("severity") == "critical"]
         for finding in critical:
             remediation = finding.get("kb_remediation") or finding.get("remediation", "")
@@ -653,7 +608,6 @@ class IntelligenceEngine:
                 "vuln_id": finding.get("vuln_id", ""),
             })
 
-        # Priority 3: High findings
         high = [f for f in findings if f.get("severity") == "high"]
         for finding in high:
             remediation = finding.get("kb_remediation") or finding.get("remediation", "")
@@ -666,7 +620,6 @@ class IntelligenceEngine:
                 "vuln_id": finding.get("vuln_id", ""),
             })
 
-        # Priority 4: Quick wins (medium findings that are easy to fix)
         medium = [f for f in findings if f.get("severity") == "medium"]
         quick_win_keywords = ["header", "cookie", "cors", "disclosure", "config"]
         for finding in medium:
@@ -686,10 +639,8 @@ class IntelligenceEngine:
 
     @staticmethod
     def is_more_severe(sev_a: str, sev_b: str) -> bool:
-        """Return True if sev_a is more severe than sev_b."""
         return SEVERITY_RANK.get(sev_a.lower(), 0) > SEVERITY_RANK.get(sev_b.lower(), 0)
 
     @staticmethod
     def get_severity_rank(severity: str) -> int:
-        """Get numeric rank for severity."""
         return SEVERITY_RANK.get(severity.lower(), 0)

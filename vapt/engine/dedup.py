@@ -1,11 +1,3 @@
-"""Duplicate detector — scores the likelihood a finding is already reported.
-
-Uses pattern-based heuristics:
-  - Common vulnerability patterns per program age/type
-  - Well-known "first thing everyone reports" patterns
-  - Category-based duplicate probability tables
-  - Simple keyword matching against known common reports
-"""
 
 from __future__ import annotations
 
@@ -16,16 +8,13 @@ from typing import Any
 
 @dataclass
 class DuplicateScore:
-    """Result of duplicate analysis for a single finding."""
     finding_id: str
-    probability: float       # 0.0 – 1.0 (1.0 = almost certainly a duplicate)
-    risk_level: str          # "low" | "medium" | "high" | "very_high"
+    probability: float
+    risk_level: str
     reasons: list[str] = field(default_factory=list)
     recommendation: str = ""
 
 
-# Base duplicate probability per category.
-# Higher values = more commonly reported, higher duplicate risk.
 _CATEGORY_BASE_PROBABILITY: dict[str, float] = {
     "cors": 0.75,
     "open_redirect": 0.80,
@@ -67,7 +56,6 @@ _CATEGORY_BASE_PROBABILITY: dict[str, float] = {
     "account_takeover": 0.20,
 }
 
-# Keywords in finding titles/descriptions that indicate high-duplicate
 _HIGH_DUPLICATE_KEYWORDS: list[tuple[str, float]] = [
     ("missing x-frame-options", 0.95),
     ("missing x-content-type", 0.95),
@@ -101,22 +89,15 @@ _HIGH_DUPLICATE_KEYWORDS: list[tuple[str, float]] = [
     ("weak password", 0.80),
 ]
 
-# Programs older than this (in months) get a penalty
 _PROGRAM_AGE_PENALTY: list[tuple[int, float]] = [
-    (36, 0.20),   # 3+ years: +20% duplicate risk
-    (24, 0.15),   # 2+ years: +15%
-    (12, 0.10),   # 1+ year: +10%
-    (6, 0.05),    # 6+ months: +5%
+    (36, 0.20),
+    (24, 0.15),
+    (12, 0.10),
+    (6, 0.05),
 ]
 
 
 class DuplicateDetector:
-    """Rates the duplicate probability of each finding.
-
-    The probability is a heuristic score between 0 and 1.
-    It does NOT query external databases — it uses pattern matching
-    against common vulnerability report patterns.
-    """
 
     def __init__(
         self,
@@ -144,7 +125,6 @@ class DuplicateDetector:
         return 0.0
 
     def score(self, finding: dict) -> DuplicateScore:
-        """Score a single finding for duplicate probability."""
         fid = finding.get("id", finding.get("title", "unknown"))
         cat = finding.get("category", "").lower()
         title = finding.get("title", "").lower()
@@ -156,7 +136,6 @@ class DuplicateDetector:
         base = _CATEGORY_BASE_PROBABILITY.get(cat, 0.30)
         reasons.append(f"Base probability for '{cat}': {base:.0%}")
 
-        # Keyword matching
         keyword_boost = 0.0
         for keyword, prob in _HIGH_DUPLICATE_KEYWORDS + self._custom:
             if keyword in text:
@@ -164,7 +143,6 @@ class DuplicateDetector:
                     keyword_boost = max(keyword_boost, prob - base)
                     reasons.append(f"Matches common pattern: '{keyword}'")
 
-        # Age and resolved count adjustments
         age_pen = self._age_penalty()
         if age_pen > 0:
             reasons.append(f"Program age ({self._program_age}mo): +{age_pen:.0%}")
@@ -173,12 +151,10 @@ class DuplicateDetector:
         if resolved_pen > 0:
             reasons.append(f"Resolved reports ({self._resolved_count}): +{resolved_pen:.0%}")
 
-        # Severity discount — critical/high bugs are less likely to be dupes
         sev_discount = {"critical": 0.15, "high": 0.10, "medium": 0.05}.get(sev, 0.0)
         if sev_discount > 0:
             reasons.append(f"Severity discount ({sev}): -{sev_discount:.0%}")
 
-        # Calculate final probability
         prob = min(1.0, max(0.0, base + keyword_boost + age_pen + resolved_pen - sev_discount))
 
         if prob >= 0.75:
@@ -210,7 +186,6 @@ class DuplicateDetector:
         findings: list[dict],
         threshold: float = 0.75,
     ) -> tuple[list[dict], list[dict]]:
-        """Split findings into (worth_submitting, likely_duplicates)."""
         worth = []
         dupes = []
         for f in findings:

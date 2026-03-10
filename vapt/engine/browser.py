@@ -1,20 +1,11 @@
-"""
-Headless browser engine powered by Playwright.
-
-Provides real browser capabilities for VAPT CLI: JavaScript execution,
-SPA rendering, DOM interaction, screenshot capture, and cookie/session
-management. This is the foundation that makes active XSS validation,
-authenticated scanning, and modern web app testing possible.
-"""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from rich.console import Console
 
@@ -69,12 +60,6 @@ async def shutdown_browser():
 
 
 class BrowserEngine:
-    """High-level browser automation for security testing.
-
-    Wraps Playwright to provide a clean API for common pentest tasks:
-    rendering SPAs, capturing network traffic, injecting payloads,
-    taking screenshots, and extracting DOM state.
-    """
 
     def __init__(self):
         self.network_log: list[dict[str, Any]] = []

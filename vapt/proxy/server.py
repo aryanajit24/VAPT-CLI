@@ -1,14 +1,11 @@
-"""HTTP/HTTPS intercepting proxy server with SSL MITM."""
 
 from __future__ import annotations
 
-import io
 import logging
 import os
 import re
 import socket
 import ssl
-import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -32,7 +29,6 @@ _HTTP_HEADER_END = b"\r\n\r\n"
 
 
 class CertificateAuthority:
-    """Generates a root CA and per-host certificates for SSL interception."""
 
     def __init__(self, ca_dir: Optional[str] = None):
         if ca_dir is None:
@@ -274,7 +270,6 @@ def _parse_response_status(data: bytes) -> int:
 
 
 class ProxyFilter:
-    """Filter rules for intercepting specific traffic."""
 
     def __init__(
         self,
@@ -308,7 +303,6 @@ class ProxyFilter:
 
 
 class ProxyServer:
-    """Thread-based HTTP/HTTPS intercepting proxy with SSL MITM."""
 
     def __init__(
         self,
@@ -609,7 +603,6 @@ class ProxyServer:
 
 
 def replay_request(flow: Flow, timeout: int = 15, verify_ssl: bool = False) -> Flow:
-    """Replay a captured request and return a new Flow with the response."""
     import requests as req_lib
 
     headers = dict(flow.request_headers)

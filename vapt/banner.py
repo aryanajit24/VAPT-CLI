@@ -1,15 +1,9 @@
-"""
-VAPT CLI — ASCII banner and startup splash.
-
-The front door.  Sets the tone for the entire session.
-"""
 
 from rich.console import Console
 from rich.text import Text
 
 from vapt import __version__
 
-# Block-letter banner
 BANNER = r"""
 ██╗   ██╗ █████╗ ██████╗ ████████╗     ██████╗██╗     ██╗
 ██║   ██║██╔══██╗██╔══██╗╚══██╔══╝    ██╔════╝██║     ██║
@@ -51,7 +45,6 @@ CAPABILITIES = [
 
 
 def print_banner(console: Console | None = None) -> None:
-    """Show the VAPT CLI logo with version and capability list."""
     if console is None:
         console = Console()
 

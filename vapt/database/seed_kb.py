@@ -1,23 +1,14 @@
-"""Knowledge base seed data with vulnerability definitions."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-# Let this file run directly without installing the package.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from vapt.database.db import get_session, init_db          # noqa: E402
-from vapt.database.models import ComplianceMapping, KnowledgeEntry  # noqa: E402
+from vapt.database.db import get_session, init_db
+from vapt.database.models import ComplianceMapping, KnowledgeEntry
 
-
-# Knowledge-base entries — one dict per vulnerability class.
-# Fields follow the KnowledgeEntry model exactly.  Every entry should have:
-#   vuln_id, category, title, description, severity, cvss_score, cvss_vector,
-#   owasp_category, how_it_works, impact, remediation, code_example_fix,
-#   cve_ids, references, compliance_tags, detection_pattern,
-#   false_positive_indicators, nis2_control, iso27001_control
 
 KB_ENTRIES: list[dict] = [
 
@@ -1365,8 +1356,6 @@ KB_ENTRIES: list[dict] = [
 ]
 
 
-# Compliance framework mappings — link vulnerability categories to controls.
-
 COMPLIANCE_MAPPINGS: list[dict] = [
     {
         "framework": "NIS2",
@@ -1498,13 +1487,6 @@ COMPLIANCE_MAPPINGS: list[dict] = [
 
 
 def seed(db_path: str | None = None) -> None:
-    """
-    Upsert knowledge-base entries and compliance mappings into the DB.
-
-    Uses upsert semantics — existing records are updated in place, new ones
-    are inserted.  This means you can re-run seed() after adding new
-    entries without duplicating data.
-    """
     init_db(db_path)
     session = get_session(db_path)
 
@@ -1516,7 +1498,6 @@ def seed(db_path: str | None = None) -> None:
             .first()
         )
         if existing:
-            # Update every field so edits to the seed data land in the DB.
             for key, value in entry.items():
                 setattr(existing, key, value)
         else:

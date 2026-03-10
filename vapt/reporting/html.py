@@ -1,10 +1,3 @@
-"""
-HTML report writer — the prettiest output format.
-
-Uses Jinja2 to render a dark-themed HTML report with finding cards,
-severity badges, compliance dashboards, and attack-chain diagrams.
-The templates live in the 'templates/' subdirectory.
-"""
 
 from __future__ import annotations
 
@@ -19,11 +12,6 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 class HTMLReporter:
-    """Render a full HTML security report from scan results.
-
-    Supports both the detailed finding report (report.html) and the
-    one-page executive summary (executive.html).
-    """
 
     def __init__(self, template: str = "report.html") -> None:
         self._env = Environment(
@@ -33,7 +21,6 @@ class HTMLReporter:
         self._template_name = template
 
     def generate(self, scan_result: dict[str, Any], output_path: str) -> None:
-        """Render the Jinja2 template and write to output_path."""
         tmpl = self._env.get_template(self._template_name)
         context = {
             "scan": scan_result,

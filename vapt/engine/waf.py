@@ -1,4 +1,3 @@
-"""WAF detection and bypass strategy engine."""
 
 from __future__ import annotations
 
@@ -9,8 +8,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import requests
-
-# WAF signature database
 
 
 @dataclass
@@ -145,8 +142,6 @@ WAF_SIGNATURES: list[WAFSignature] = [
 ]
 
 
-# User-Agent pool for rotation
-
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
@@ -161,9 +156,6 @@ USER_AGENTS = [
 ]
 
 
-# WAF Detector
-
-
 @dataclass
 class WAFResult:
     detected: bool = False
@@ -173,7 +165,6 @@ class WAFResult:
 
 
 class WAFDetector:
-    """Detect WAF presence by sending a known-bad request and analysing response."""
 
     PROBE_PAYLOADS = [
         "/?test=<script>alert(1)</script>",
@@ -187,22 +178,15 @@ class WAFDetector:
         self.session.headers.setdefault("User-Agent", random.choice(USER_AGENTS))
 
     def detect(self, base_url: str) -> WAFResult:
-        """
-        Send probe requests and match responses against WAF signatures.
-        Returns best-match WAFResult.
-        """
-        # Step 1: Baseline — normal request to get clean headers
         try:
             baseline = self.session.get(base_url, timeout=10, allow_redirects=True)
         except requests.RequestException:
             return WAFResult()
 
-        # Step 2: Check baseline headers for WAF markers
         best = self._match_response(baseline)
         if best.detected and best.confidence >= 0.8:
             return best
 
-        # Step 3: Trigger WAF with malicious probes
         for probe in self.PROBE_PAYLOADS:
             try:
                 resp = self.session.get(
@@ -222,7 +206,6 @@ class WAFDetector:
         return best
 
     def _match_response(self, resp: requests.Response) -> WAFResult:
-        """Score a response against all WAF signatures."""
         best = WAFResult()
 
         for sig in WAF_SIGNATURES:
@@ -230,7 +213,6 @@ class WAFDetector:
             total_checks = 0
             details: dict[str, Any] = {}
 
-            # Header matching
             for header_name, pattern in sig.headers.items():
                 total_checks += 1
                 value = resp.headers.get(header_name, "")
@@ -238,7 +220,6 @@ class WAFDetector:
                     score += 1
                     details[f"header:{header_name}"] = value
 
-            # Cookie matching
             for cookie_prefix in sig.cookies:
                 total_checks += 1
                 for cookie_name in resp.cookies.keys():
@@ -247,15 +228,13 @@ class WAFDetector:
                         details[f"cookie:{cookie_prefix}"] = True
                         break
 
-            # Body pattern matching
-            body_text = resp.text[:10000]  # Limit body scan
+            body_text = resp.text[:10000]
             for pattern in sig.body_patterns:
                 total_checks += 1
                 if pattern.search(body_text):
                     score += 1
                     details["body_match"] = pattern.pattern
 
-            # Status code matching
             if sig.status_codes:
                 total_checks += 1
                 if resp.status_code in sig.status_codes:
@@ -277,19 +256,7 @@ class WAFDetector:
         return best
 
 
-# WAF Bypass — request transformation pipeline
-
 class WAFBypass:
-    """
-    Transforms outgoing requests to evade WAF detection.
-
-    Strategies applied based on detected WAF:
-      - User-Agent rotation
-      - Header randomization
-      - Request splitting / chunked encoding
-      - Payload encoding (double-URL, Unicode, hex, case mutation)
-      - Adding junk parameters to dilute signatures
-    """
 
     def __init__(self, waf_result: WAFResult | None = None) -> None:
         self.waf = waf_result or WAFResult()
@@ -298,7 +265,6 @@ class WAFBypass:
         self._ua_index = 0
 
     def get_headers(self) -> dict[str, str]:
-        """Return randomised headers to evade WAF fingerprinting."""
         ua = self._ua_pool[self._ua_index % len(self._ua_pool)]
         self._ua_index += 1
 
@@ -318,7 +284,6 @@ class WAFBypass:
             "Accept-Encoding": "gzip, deflate, br",
         }
 
-        # Add junk headers to increase request entropy
         junk_headers = {
             "X-Forwarded-For": f"{random.randint(1,254)}.{random.randint(0,254)}.{random.randint(0,254)}.{random.randint(1,254)}",
             "X-Real-IP": f"10.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}",
@@ -326,7 +291,6 @@ class WAFBypass:
             "X-Client-IP": f"172.{random.randint(16,31)}.{random.randint(0,255)}.{random.randint(1,254)}",
         }
 
-        # Only add some junk headers randomly
         for k, v in junk_headers.items():
             if random.random() > 0.5:
                 headers[k] = v
@@ -334,7 +298,6 @@ class WAFBypass:
         return headers
 
     def add_junk_params(self, url: str, count: int = 2) -> str:
-        """Add random harmless query parameters to dilute WAF pattern matching."""
         separator = "&" if "?" in url else "?"
         params = []
         for _ in range(count):
@@ -350,20 +313,14 @@ class WAFBypass:
         url: str,
         **kwargs: Any,
     ) -> requests.Response:
-        """
-        Send request with WAF bypass transformations applied.
-        """
-        # Merge bypass headers
         existing_headers = kwargs.pop("headers", {}) or {}
         bypass_headers = self.get_headers()
         bypass_headers.update(existing_headers)
         kwargs["headers"] = bypass_headers
 
-        # Add junk params
         if self.waf.detected and self.waf.confidence > 0.5:
             url = self.add_junk_params(url)
 
-        # Small random delay to avoid rate-limit patterns
         if self.waf.detected:
             time.sleep(random.uniform(0.05, 0.3))
 
@@ -374,14 +331,6 @@ def detect_and_prepare(
     base_url: str,
     session: requests.Session | None = None,
 ) -> tuple[WAFResult, WAFBypass]:
-    """
-    Convenience function: detect WAF and return a matching bypass engine.
-
-    Usage:
-        waf_result, bypass = detect_and_prepare("https://target.com")
-        if waf_result.detected:
-            console.print(f"WAF detected: {waf_result.waf_name}")
-    """
     detector = WAFDetector(session)
     result = detector.detect(base_url)
     return result, WAFBypass(result)

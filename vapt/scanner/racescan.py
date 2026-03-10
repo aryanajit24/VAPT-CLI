@@ -1,4 +1,3 @@
-"""Race condition and TOCTOU vulnerability scanner."""
 
 from __future__ import annotations
 
@@ -7,15 +6,13 @@ import json
 import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
-from bs4 import BeautifulSoup
 
 from vapt.utils.helpers import sanitize_target
 
-# Race-prone Endpoint Patterns
 
 RACE_ENDPOINTS = {
     "double_spend": [
@@ -59,7 +56,6 @@ RACE_ENDPOINTS = {
 
 
 class RaceScanner:
-    """Concurrent request engine for finding race condition vulnerabilities."""
 
     def __init__(
         self,
@@ -74,15 +70,12 @@ class RaceScanner:
         self.findings: list[dict] = []
 
     def run(self, target: str) -> dict[str, Any]:
-        """Execute full race condition scan."""
         target = sanitize_target(target)
         if not target.startswith("http"):
             target = f"https://{target}"
 
-        # Phase 1: Discover endpoints
         endpoints = self._discover_endpoints(target)
 
-        # Phase 2: Test each category
         self._test_double_spend(target, endpoints)
         self._test_rate_limit_bypass(target, endpoints)
         self._test_duplicate_creation(target, endpoints)
@@ -92,7 +85,6 @@ class RaceScanner:
 
 
     def _discover_endpoints(self, target: str) -> dict[str, list[str]]:
-        """Probe for race-prone endpoints."""
         found: dict[str, list[str]] = {}
 
         for category, paths in RACE_ENDPOINTS.items():
@@ -100,7 +92,6 @@ class RaceScanner:
             for path in paths:
                 url = urljoin(target, path)
                 try:
-                    # Use OPTIONS/HEAD to check if endpoint exists
                     resp = self.session.options(url, timeout=self.timeout)
                     if resp.status_code < 500:
                         category_hits.append(url)
@@ -130,17 +121,13 @@ class RaceScanner:
         headers: dict | None = None,
         count: int = 20,
     ) -> list[dict]:
-        """Send multiple identical requests simultaneously.
-        
-        Uses a barrier to synchronize thread starts for maximum race window exploitation.
-        """
         results: list[dict] = []
         lock = threading.Lock()
         barrier = threading.Barrier(min(count, self.threads))
 
         def _single_request(idx: int) -> dict:
             try:
-                barrier.wait(timeout=5)  # Synchronize all threads
+                barrier.wait(timeout=5)
             except threading.BrokenBarrierError:
                 pass
 
@@ -195,7 +182,6 @@ class RaceScanner:
 
 
     def _analyze_responses(self, results: list[dict]) -> dict[str, Any]:
-        """Analyze concurrent responses for race condition indicators."""
         valid_results = [r for r in results if not r.get("error")]
         if not valid_results:
             return {"vulnerable": False, "reason": "All requests failed"}
@@ -219,19 +205,15 @@ class RaceScanner:
         for s in statuses:
             analysis["status_distribution"][s] = analysis["status_distribution"].get(s, 0) + 1
 
-        # Indicator 1: Multiple successes for single-use resources
         if success_count > 1:
             analysis["indicators"].append(f"{success_count} successful responses (expected 1)")
 
-        # Indicator 2: All return 200 (no locking/dedup)
         if success_count == len(valid_results):
             analysis["indicators"].append("All requests succeeded — no concurrency protection")
 
-        # Indicator 3: Mixed response codes (some won, some lost the race)
         if len(unique_statuses) > 1 and success_count > 0:
             analysis["indicators"].append(f"Mixed status codes: {unique_statuses}")
 
-        # Indicator 4: Different response bodies (state mutation detected)
         if unique_lengths > 2 and len(valid_results) > 5:
             analysis["indicators"].append(f"{unique_lengths} different response sizes — state changing")
 
@@ -241,11 +223,9 @@ class RaceScanner:
 
 
     def _test_double_spend(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Test for double-spend / coupon reuse race conditions."""
         test_urls = endpoints.get("double_spend", []) + endpoints.get("financial", [])
 
         for url in test_urls[:10]:
-            # Test with both JSON and form data
             test_payloads = [
                 {"coupon": "TEST123", "code": "TEST123"},
                 {"amount": "1", "recipient": "test@test.com"},
@@ -292,11 +272,9 @@ class RaceScanner:
 
 
     def _test_rate_limit_bypass(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Test if rate limits can be bypassed with concurrent requests."""
         test_urls = endpoints.get("rate_limited", []) + endpoints.get("auth", [])
 
         for url in test_urls[:5]:
-            # Send a burst of requests
             results = self._send_concurrent(
                 url,
                 method="POST",
@@ -308,7 +286,6 @@ class RaceScanner:
             non_429 = [r for r in valid if r["status"] != 429]
             is_429 = [r for r in valid if r["status"] == 429]
 
-            # If we got rate limited on some but not all, there's a bypass window
             if is_429 and non_429 and len(non_429) > len(is_429):
                 evidence = (
                     f"Endpoint: {url}\n"
@@ -338,7 +315,6 @@ class RaceScanner:
                         f"4. PoC command: for i in $(seq 1 30); do curl -X POST {url} -d 'user=admin&pass=test' & done; wait",
                 )
 
-            # Also check if ALL went through (no rate limiting at all)
             elif not is_429 and len(non_429) > 20:
                 success = [r for r in non_429 if 200 <= r["status"] < 300]
                 if len(success) == len(non_429):
@@ -348,7 +324,7 @@ class RaceScanner:
                         severity="High",
                         cvss=7.0,
                         url=url,
-                        category="rate_condition",
+                        category="race_condition",
                         evidence=f"Sent {len(valid)} concurrent requests — zero rate limited.\nAll returned 2xx status.",
                         payload=f"30 concurrent POST requests to {url}",
                         remediation="Implement rate limiting on authentication endpoints. Use Redis or token bucket algorithm. Apply per-IP and per-account limits.",
@@ -358,7 +334,6 @@ class RaceScanner:
 
 
     def _test_duplicate_creation(self, target: str, endpoints: dict[str, list[str]]) -> None:
-        """Test for duplicate resource creation via race condition."""
         test_urls = endpoints.get("resource", []) + endpoints.get("social", [])
 
         for url in test_urls[:5]:
@@ -379,7 +354,6 @@ class RaceScanner:
             analysis = self._analyze_responses(results)
             success_results = [r for r in results if 200 <= r.get("status", 0) < 300 and not r.get("error")]
 
-            # If multiple 201/200 responses with same payload → duplicate created
             if len(success_results) > 1:
                 bodies = [r["body"] for r in success_results]
                 unique_bodies = set(bodies)
@@ -407,8 +381,6 @@ class RaceScanner:
 
 
     def _test_session_race(self, target: str) -> None:
-        """Test for session-related race conditions."""
-        # Test concurrent session operations
         login_urls = [
             urljoin(target, p)
             for p in ["/login", "/api/login", "/api/auth/login", "/auth/login"]
@@ -422,8 +394,6 @@ class RaceScanner:
             except Exception:
                 continue
 
-            # Test: concurrent login + password change race
-            # Send concurrent requests to different auth endpoints
             results = self._send_concurrent(
                 url,
                 method="POST",
@@ -433,14 +403,12 @@ class RaceScanner:
 
             valid = [r for r in results if not r.get("error")]
             
-            # Check for session token inconsistencies
             cookies_seen = set()
             tokens_seen = set()
             
             for r in valid:
                 if "set-cookie" in r.get("headers", {}):
                     cookies_seen.add(r["headers"]["set-cookie"][:50])
-                # Check for token in body
                 try:
                     body = json.loads(r["body"])
                     if isinstance(body, dict):
@@ -480,20 +448,16 @@ class RaceScanner:
         payload: dict,
         analysis: dict,
     ) -> str:
-        """Generate a detailed PoC for race condition findings."""
         json_payload = json.dumps(payload)
         poc = f"""## Race Condition PoC
 
-### Target
 {url}
 
-### Steps to Reproduce
 1. Prepare {analysis.get('total', 20)} concurrent HTTP {method} requests
 2. Payload: {json_payload}
 3. Fire all requests simultaneously using threading/asyncio
 4. Observe: {analysis.get('success_count', 0)} requests succeed instead of expected 1
 
-### Python PoC Script
 ```python
 import threading, requests
 
@@ -513,7 +477,6 @@ for t in threads: t.join()
 print(f"Successes: {{results.count(200)}}")
 ```
 
-### cURL PoC
 ```bash
 for i in $(seq 1 20); do
   curl -s -X {method} {url} -H 'Content-Type: application/json' -d '{json_payload}' &
@@ -521,7 +484,6 @@ done
 wait
 ```
 
-### Impact
 - {analysis.get('success_count', 0)} out of {analysis.get('total', 20)} requests succeeded
 - Indicators: {', '.join(analysis.get('indicators', []))}
 """
@@ -529,7 +491,6 @@ wait
 
 
     def _add_finding(self, **kwargs: Any) -> None:
-        """Add a deduplicated finding."""
         key = (kwargs.get("vuln_id"), kwargs.get("url"))
         dedup = hashlib.md5(str(key).encode()).hexdigest()
 

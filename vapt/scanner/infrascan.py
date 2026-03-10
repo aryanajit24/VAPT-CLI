@@ -1,4 +1,3 @@
-"""Infrastructure security scanner for misconfigurations."""
 
 from __future__ import annotations
 
@@ -22,35 +21,26 @@ ACTUATOR_PATHS = [
     "/actuator/httptrace", "/actuator/caches", "/actuator/conditions",
     "/actuator/flyway", "/actuator/liquibase", "/actuator/sessions",
     "/actuator/shutdown",
-    # Legacy Spring Boot 1.x paths
     "/health", "/info", "/env", "/metrics", "/trace", "/dump", "/configprops",
     "/beans", "/mappings", "/autoconfig", "/conditions",
 ]
 
 ACTUATOR_WAF_BYPASSES = [
-    # Trailing slash
     lambda p: p.rstrip("/") + "/",
-    # Double slash prefix
     lambda p: "/" + p.lstrip("/"),
-    # Path traversal
     lambda p: "/." + p,
-    # URL encoding
     lambda p: p.replace("/", "%2f") if p.count("/") > 1 else p,
-    # Semicolon injection (Tomcat)
     lambda p: "/;" + p.lstrip("/"),
-    # Case variation
     lambda p: p[0] + p[1:].title() if len(p) > 1 else p,
 ]
 
 CONFIG_FILES = [
-    # Environment files
     ("/.env", "INFRA-002"),
     ("/.env.production", "INFRA-002"),
     ("/.env.local", "INFRA-002"),
     ("/.env.development", "INFRA-002"),
     ("/.env.staging", "INFRA-002"),
     ("/.env.backup", "INFRA-002"),
-    # Config files
     ("/config.json", "INFRA-002"),
     ("/config.yaml", "INFRA-002"),
     ("/config.yml", "INFRA-002"),
@@ -65,10 +55,8 @@ CONFIG_FILES = [
     ("/docker-compose.yaml", "INFRA-002"),
     ("/.docker-compose.yml", "INFRA-002"),
     ("/Dockerfile", "INFRA-002"),
-    # Git
     ("/.git/HEAD", "INFRA-003"),
     ("/.git/config", "INFRA-003"),
-    # Kubernetes
     ("/api/v1", "INFRA-004"),
     ("/apis", "INFRA-004"),
     ("/healthz", "INFRA-004"),
@@ -131,7 +119,7 @@ DB_PANELS = [
     ("/pgadmin/", "INFRA-011"),
     ("/mongoexpress/", "INFRA-011"),
     ("/mongo-express/", "INFRA-011"),
-    ("/_utils", "INFRA-011"),  # CouchDB Fauxton
+    ("/_utils", "INFRA-011"),
     ("/redis-commander/", "INFRA-011"),
 ]
 
@@ -149,7 +137,6 @@ BACKUP_FILES = [
     ("/db_backup.tar.gz", "INFRA-015"),
 ]
 
-# Patterns that indicate real config data (not error pages)
 CONFIG_INDICATORS = [
     r"DB_PASSWORD|DB_HOST|DATABASE_URL",
     r"SECRET_KEY|API_KEY|JWT_SECRET",
@@ -174,7 +161,6 @@ PROMETHEUS_PATTERN = re.compile(
 
 
 class InfraScanner:
-    """Infrastructure-level vulnerability scanner."""
 
     def __init__(
         self,
@@ -188,7 +174,6 @@ class InfraScanner:
         self.findings: list[dict] = []
 
     def run(self, target: str) -> dict[str, Any]:
-        """Run all infrastructure checks against target."""
         base = sanitize_target(target)
         if not base.startswith("http"):
             base = f"https://{base}"
@@ -206,7 +191,6 @@ class InfraScanner:
 
 
     def _check_actuator(self, base: str) -> None:
-        """Check for Spring Boot Actuator endpoints with WAF bypass attempts."""
         found_paths: set[str] = set()
 
         for path in ACTUATOR_PATHS:
@@ -229,13 +213,11 @@ class InfraScanner:
                         ),
                     ))
                 elif resp.status_code == 403:
-                    # Try WAF bypass techniques
                     self._try_actuator_bypass(base, path, found_paths)
             except RequestException:
                 continue
 
     def _try_actuator_bypass(self, base: str, path: str, found_paths: set) -> None:
-        """Attempt WAF bypass on blocked actuator endpoints."""
         for bypass_fn in ACTUATOR_WAF_BYPASSES:
             try:
                 bypassed = bypass_fn(path)
@@ -246,7 +228,6 @@ class InfraScanner:
                 if resp.status_code == 200 and self._is_actuator_response(resp.text, path):
                     found_paths.add(bypassed)
                     severity = self._actuator_severity(path)
-                    # WAF bypass is always at least "high"
                     if severity in ("low", "medium"):
                         severity = "high"
                     self.findings.append(self._make_finding(
@@ -262,39 +243,32 @@ class InfraScanner:
                             "control as defense-in-depth."
                         ),
                     ))
-                    break  # One bypass is enough per path
+                    break
             except RequestException:
                 continue
 
     def _is_actuator_response(self, body: str, path: str) -> bool:
-        """Validate response is actually actuator data (not error/default page)."""
         if not body or len(body) < 5:
             return False
 
-        # Health endpoint
         if "health" in path:
             return '"status"' in body and ("UP" in body or "DOWN" in body)
 
-        # Prometheus metrics
         if "prometheus" in path or "metrics" in path:
             return bool(PROMETHEUS_PATTERN.search(body))
 
-        # General actuator JSON
         if SPRING_ACTUATOR_PATTERN.search(body):
             return True
 
-        # Heapdump is binary
         if "heapdump" in path:
             return len(body) > 1000
 
-        # Env/configprops should have property-like content
         if any(x in path for x in ("env", "configprops", "beans", "mappings")):
             return "{" in body and "}" in body and len(body) > 50
 
         return False
 
     def _actuator_severity(self, path: str) -> str:
-        """Determine severity based on which actuator endpoint is exposed."""
         critical = {"env", "configprops", "heapdump", "shutdown", "sessions"}
         high = {"prometheus", "beans", "mappings", "loggers", "httptrace", "threaddump"}
         medium = {"info", "metrics", "caches", "conditions", "flyway", "scheduledtasks"}
@@ -306,11 +280,10 @@ class InfraScanner:
             return "high"
         if endpoint in medium:
             return "medium"
-        return "low"  # health, actuator root
+        return "low"
 
 
     def _check_config_files(self, base: str) -> None:
-        """Probe for exposed configuration files."""
         for path, vuln_id in CONFIG_FILES:
             url = urljoin(base, path)
             try:
@@ -318,7 +291,6 @@ class InfraScanner:
                 if resp.status_code != 200 or len(resp.text) < 10:
                     continue
 
-                # Git detection
                 if vuln_id == "INFRA-003":
                     if "HEAD" in path and GIT_HEAD_PATTERN.search(resp.text):
                         self.findings.append(self._make_finding(
@@ -341,7 +313,6 @@ class InfraScanner:
                         ))
                     continue
 
-                # K8s detection
                 if vuln_id == "INFRA-004":
                     if any(kw in resp.text for kw in ('"kind"', '"apiVersion"', '"items"', "pods", "namespaces")):
                         self.findings.append(self._make_finding(
@@ -355,7 +326,6 @@ class InfraScanner:
                         ))
                     continue
 
-                # Config file detection — check for real secrets
                 if self._has_secrets(resp.text):
                     self.findings.append(self._make_finding(
                         vuln_id=vuln_id,
@@ -383,14 +353,12 @@ class InfraScanner:
                 continue
 
     def _has_secrets(self, body: str) -> bool:
-        """Check if config file contains actual secrets."""
         for pattern in CONFIG_INDICATORS:
             if re.search(pattern, body, re.IGNORECASE):
                 return True
         return False
 
     def _looks_like_config(self, body: str, path: str) -> bool:
-        """Determine if response is actually a config file (not error page)."""
         if ".env" in path:
             return "=" in body and not "<html" in body.lower()
         if any(path.endswith(ext) for ext in (".json", ".yaml", ".yml")):
@@ -404,7 +372,6 @@ class InfraScanner:
         return False
 
     def _redact_secrets(self, text: str) -> str:
-        """Redact actual secret values for responsible disclosure."""
         lines = []
         for line in text.split("\n"):
             if "=" in line:
@@ -418,13 +385,11 @@ class InfraScanner:
 
 
     def _check_admin_panels(self, base: str) -> None:
-        """Discover exposed admin/management panels."""
         for path, vuln_id in ADMIN_PANELS:
             url = urljoin(base, path)
             try:
                 resp = self.session.get(url, timeout=self.timeout, verify=False, allow_redirects=True)
                 if resp.status_code == 200 and len(resp.text) > 100:
-                    # Skip generic 404 pages
                     if self._is_real_panel(resp.text, path):
                         title_map = {
                             "grafana": "Grafana Dashboard",
@@ -458,7 +423,6 @@ class InfraScanner:
                 continue
 
     def _is_real_panel(self, body: str, path: str) -> bool:
-        """Verify response is actually an admin panel, not a 404/redirect."""
         lower = body.lower()
         panel_indicators = [
             "grafana", "kibana", "jenkins", "portainer", "traefik",
@@ -468,14 +432,12 @@ class InfraScanner:
         return any(ind in lower for ind in panel_indicators)
 
     def _panel_needs_auth(self, body: str) -> bool:
-        """Check if the panel requires authentication."""
         lower = body.lower()
         auth_indicators = ["login", "sign in", "password", "authenticate", "unauthorized"]
         return any(ind in lower for ind in auth_indicators)
 
 
     def _check_debug_endpoints(self, base: str) -> None:
-        """Discover exposed debug/profiling endpoints."""
         for path, vuln_id in DEBUG_ENDPOINTS:
             url = urljoin(base, path)
             try:
@@ -496,7 +458,6 @@ class InfraScanner:
                 continue
 
     def _is_debug_response(self, body: str, path: str) -> bool:
-        """Validate response is debug data."""
         if "phpinfo" in path or "info.php" in path:
             return "PHP Version" in body or "phpinfo()" in body
         if "debug" in path or "profiler" in path or "telescope" in path:
@@ -507,7 +468,6 @@ class InfraScanner:
 
 
     def _check_db_panels(self, base: str) -> None:
-        """Discover exposed database management panels."""
         for path, vuln_id in DB_PANELS:
             url = urljoin(base, path)
             try:
@@ -527,7 +487,6 @@ class InfraScanner:
 
 
     def _check_backup_files(self, base: str) -> None:
-        """Discover exposed backup/dump files."""
         for path, vuln_id in BACKUP_FILES:
             url = urljoin(base, path)
             try:
@@ -535,7 +494,6 @@ class InfraScanner:
                 if resp.status_code == 200:
                     content_type = resp.headers.get("content-type", "")
                     content_length = int(resp.headers.get("content-length", "0"))
-                    # Backup files should be sizeable and not HTML
                     if content_length > 1000 and "text/html" not in content_type:
                         self.findings.append(self._make_finding(
                             vuln_id=vuln_id,
@@ -552,24 +510,21 @@ class InfraScanner:
 
 
     def _check_source_maps(self, base: str) -> None:
-        """Check if JavaScript source maps are exposed."""
         try:
             resp = self.session.get(base, timeout=self.timeout, verify=False)
             if resp.status_code != 200:
                 return
 
-            # Find JS bundle URLs
             js_urls = re.findall(r'(?:src|href)=["\']([^"\']+\.js(?:\?[^"\']*)?)["\']', resp.text)
             js_urls += re.findall(r'//# sourceMappingURL=(\S+)', resp.text)
 
             checked = set()
-            for js_url in js_urls[:20]:  # Limit to 20 files
+            for js_url in js_urls[:20]:
                 if js_url.startswith("//"):
                     js_url = "https:" + js_url
                 elif not js_url.startswith("http"):
                     js_url = urljoin(base, js_url)
 
-                # Try .map extension
                 map_url = js_url.split("?")[0] + ".map"
                 if map_url in checked:
                     continue
@@ -595,12 +550,10 @@ class InfraScanner:
             pass
 
     def _is_source_map(self, body: str) -> bool:
-        """Verify response is actually a source map."""
         return ('"version"' in body and '"sources"' in body) or ('"mappings"' in body)
 
 
     def _check_feature_flags(self, base: str) -> None:
-        """Check for exposed feature flag client IDs (LaunchDarkly, etc.)."""
         config_paths = [
             "/config.json", "/config.js", "/settings.json",
             "/app-config.json", "/env.json", "/runtime-config.json",
@@ -614,7 +567,6 @@ class InfraScanner:
                     continue
 
                 body = resp.text
-                # LaunchDarkly
                 ld_match = re.search(r'"(?:clientSideId|launchDarkly[^"]*)"[:\s]+"([a-f0-9]{24})"', body)
                 if ld_match:
                     client_id = ld_match.group(1)
@@ -628,7 +580,6 @@ class InfraScanner:
                         remediation="LaunchDarkly client-side IDs are designed to be public, but enumerated flags may reveal internal feature names and business logic.",
                     ))
 
-                # Other flag services
                 if "FEATURE_FLAG" in body.upper() or "feature_toggle" in body.lower():
                     self.findings.append(self._make_finding(
                         vuln_id="INFRA-012",
@@ -653,7 +604,6 @@ class InfraScanner:
         category: str = "infrastructure",
         remediation: str = "",
     ) -> dict:
-        """Build a standardized finding dict."""
         cvss_map = {
             "critical": 9.5, "high": 7.5, "medium": 5.3, "low": 3.1, "info": 0.0,
         }

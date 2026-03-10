@@ -1,8 +1,6 @@
-"""Business logic vulnerability scanner."""
 
 from __future__ import annotations
 
-import copy
 import json
 import re
 import time
@@ -76,15 +74,6 @@ VERIFICATION_ENDPOINTS = [
 
 
 class BusinessLogicScanner:
-    """
-    Scanner specifically designed to find business logic vulnerabilities.
-    
-    Unlike traditional scanners that look for technical flaws (SQLi, XSS),
-    this scanner understands business operations and tests for flaws
-    in the APPLICATION LOGIC itself.
-    
-    Requires an authenticated session for meaningful results.
-    """
 
     def __init__(
         self,
@@ -108,24 +97,6 @@ class BusinessLogicScanner:
         auth_session: requests.Session | None = None,
         second_auth_session: requests.Session | None = None,
     ) -> dict[str, Any]:
-        """
-        Run the full business logic scan.
-        
-        Parameters
-        ----------
-        target : str
-            Base URL of the target application.
-        endpoints : list[str], optional
-            Pre-discovered API endpoints to test.
-        auth_session : requests.Session, optional
-            Authenticated session for user A (primary test user).
-        second_auth_session : requests.Session, optional
-            Authenticated session for user B (for IDOR/priv-esc testing).
-            
-        Returns
-        -------
-        dict with 'findings' list and metadata.
-        """
         target = sanitize_target(target)
         if auth_session:
             self.session = auth_session
@@ -162,7 +133,6 @@ class BusinessLogicScanner:
         }
 
     def _discover_endpoints(self, target: str, known_endpoints: list[str] | None) -> list[str]:
-        """Discover business-critical endpoints by probing common paths."""
         discovered = list(known_endpoints or [])
         
         all_candidate_paths = (
@@ -175,7 +145,6 @@ class BusinessLogicScanner:
             if url in discovered:
                 continue
             try:
-                # Use OPTIONS or HEAD to discover without side effects
                 resp = self.session.options(url, timeout=self.timeout, allow_redirects=False, verify=False)
                 if resp.status_code not in (404, 502, 503):
                     discovered.append(url)
@@ -205,7 +174,6 @@ class BusinessLogicScanner:
         return discovered
 
     def _classify_endpoints(self, endpoints: list[str]) -> dict[str, list[str]]:
-        """Classify discovered endpoints by business function."""
         classified: dict[str, list[str]] = {
             "financial": [],
             "promo": [],
@@ -250,12 +218,6 @@ class BusinessLogicScanner:
         return classified
 
     def _test_race_conditions(self, target: str, financial_endpoints: list[str]) -> None:
-        """
-        BIZ-001: Test for race conditions on financial operations.
-        
-        Sends concurrent identical requests to detect double-spend,
-        double-credit, or duplicate transaction creation.
-        """
         if not financial_endpoints:
             return
         
@@ -339,12 +301,6 @@ class BusinessLogicScanner:
                         })
 
     def _test_negative_amounts(self, target: str, financial_endpoints: list[str]) -> None:
-        """
-        BIZ-002: Test for negative amount manipulation.
-        
-        Sending negative amounts can reverse the direction of a transfer
-        (e.g., transfer -$100 = RECEIVE $100 instead of SEND $100).
-        """
         if not financial_endpoints:
             return
         
@@ -406,17 +362,11 @@ class BusinessLogicScanner:
                                     "Verify the account balance changed in the reverse direction",
                                 ],
                             })
-                            break  # One finding per endpoint
+                            break
                 except RequestException:
                     continue
 
     def _test_amount_manipulation(self, target: str, financial_endpoints: list[str]) -> None:
-        """
-        BIZ-003: Test for currency/unit manipulation and rounding exploits.
-        
-        Tests: overflow values, precision manipulation, currency mismatch,
-        scientific notation, and rounding exploitation.
-        """
         if not financial_endpoints:
             return
         
@@ -425,12 +375,12 @@ class BusinessLogicScanner:
             {"amount": 0.001},
             {"amount": 0.00001},
             {"amount": 99999999999},
-            {"amount": 2147483647},       # INT_MAX
+            {"amount": 2147483647},
             {"amount": 9999999999999999},
             {"amount": "NaN"},
             {"amount": "Infinity"},
-            {"amount": "1e10"},            # Scientific notation
-            {"amount": "0x64"},            # Hex
+            {"amount": "1e10"},
+            {"amount": "0x64"},
             {"amount": "100.000000000000001"},
             {"amount": "0.000000000000001"},
             {"amount": 1, "currency": "XXX"},
@@ -483,11 +433,6 @@ class BusinessLogicScanner:
                     continue
 
     def _test_workflow_bypass(self, target: str, verification_endpoints: list[str]) -> None:
-        """
-        BIZ-004: Test for workflow bypass (skip verification steps).
-        
-        Attempts to access post-verification resources without completing verification.
-        """
         if not verification_endpoints:
             return
         
@@ -521,12 +466,6 @@ class BusinessLogicScanner:
                 continue
 
     def _test_promo_abuse(self, target: str, promo_endpoints: list[str]) -> None:
-        """
-        BIZ-005: Test for coupon/promo code abuse.
-        
-        Tests: reuse of one-time codes, stacking multiple promos,
-        applying promos to wrong context, self-referral loops.
-        """
         if not promo_endpoints:
             return
         
@@ -577,12 +516,6 @@ class BusinessLogicScanner:
                     break
 
     def _test_parameter_tampering(self, target: str, account_endpoints: list[str]) -> None:
-        """
-        BIZ-006: Test for privilege escalation via parameter tampering.
-        
-        Attempts to modify user role/permissions via hidden parameters
-        in profile update requests.
-        """
         if not account_endpoints:
             return
         
@@ -663,12 +596,6 @@ class BusinessLogicScanner:
                         continue
 
     def _test_idempotency_bypass(self, target: str, financial_endpoints: list[str]) -> None:
-        """
-        BIZ-014: Test for idempotency bypass (replay operations).
-        
-        Captures a successful request and replays it multiple times
-        to check if the operation is processed more than once.
-        """
         if not financial_endpoints:
             return
         
@@ -726,12 +653,6 @@ class BusinessLogicScanner:
                 })
 
     def _test_mfa_bypass(self, target: str, verification_endpoints: list[str]) -> None:
-        """
-        BIZ-007: Test for 2FA/MFA bypass techniques.
-        
-        Tests: empty OTP, null OTP, brute-force small OTP space,
-        skip 2FA step entirely, replay old OTP.
-        """
         if not verification_endpoints:
             return
         
@@ -800,12 +721,6 @@ class BusinessLogicScanner:
                     continue
 
     def _test_feature_flag_bypass(self, target: str) -> None:
-        """
-        BIZ-015: Test for feature flag bypass.
-        
-        Attempts to access premium/beta/internal features by manipulating
-        headers, cookies, or query parameters.
-        """
         feature_headers = [
             {"X-Feature-Flag": "premium"},
             {"X-Feature-Flag": "beta"},
@@ -880,15 +795,6 @@ class BusinessLogicScanner:
         session_a: requests.Session,
         session_b: requests.Session,
     ) -> None:
-        """
-        Test for IDOR using two authenticated sessions.
-        
-        Steps:
-        1. Fetch user A's resources using session A
-        2. Extract resource IDs 
-        3. Attempt to access user A's resources using session B
-        4. If successful, it's an IDOR
-        """
         all_eps = []
         for category, eps in classified.items():
             if category != "other":

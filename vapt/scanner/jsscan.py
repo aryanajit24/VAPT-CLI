@@ -1,4 +1,3 @@
-"""JavaScript secret and API key scanner."""
 
 from __future__ import annotations
 
@@ -15,13 +14,10 @@ from requests.exceptions import RequestException
 from vapt.utils.helpers import sanitize_target
 
 
-# Each tuple: (pattern_re, category, title, severity, cvss, description)
-
 _SECRET_PATTERNS: list[tuple[re.Pattern, str, str, str, float, str]] = []
 
 
 def _p(pattern: str, cat: str, title: str, sev: str, cvss: float, desc: str) -> None:
-    """Helper to compile and register a pattern."""
     _SECRET_PATTERNS.append((
         re.compile(pattern, re.IGNORECASE),
         cat, title, sev, cvss, desc,
@@ -139,7 +135,6 @@ _p(r"""(?:['"`])(\/(?:api\/)?(?:v[0-9]+\/)?(?:admin|internal|debug|graphql|swagg
 SOURCE_MAP_RE = re.compile(r"//[#@]\s*sourceMappingURL\s*=\s*(\S+)")
 
 
-# Common false positives for generic API key patterns
 FP_VALUES: set[str] = {
     "undefined", "null", "true", "false", "none",
     "your_api_key", "YOUR_API_KEY", "YOUR-API-KEY",
@@ -151,7 +146,6 @@ FP_VALUES: set[str] = {
 
 
 def _shannon_entropy(s: str) -> float:
-    """Calculate Shannon entropy of a string (higher = more random = likely real key)."""
     if not s:
         return 0.0
     freq: dict[str, int] = {}
@@ -165,34 +159,21 @@ def _shannon_entropy(s: str) -> float:
 
 
 def _is_false_positive(value: str) -> bool:
-    """Filter out common false positives."""
     if not value or len(value) < 8:
         return True
     v = value.strip("'\"` \t\n")
     if v.lower() in {fp.lower() for fp in FP_VALUES}:
         return True
-    # All same character
     if len(set(v)) <= 2:
         return True
-    # Too low entropy (likely a variable name, not a key)
     if len(v) > 15 and _shannon_entropy(v) < 2.5:
         return True
-    # Looks like a code variable (camelCase function)
     if re.match(r"^[a-z][a-zA-Z]+\(", v):
         return True
     return False
 
 
 class JSSecretScanner:
-    """
-    Discover JavaScript files and mine them for secrets, keys, and internal URLs.
-
-    This scanner is GOLD for bug bounties:
-    - Bypasses WAF (JS is delivered to browser in plaintext)
-    - Finds high-severity secrets (API keys, tokens, passwords)
-    - Discovers hidden internal endpoints
-    - Source maps can expose entire server-side source code
-    """
 
     def __init__(
         self,
@@ -213,7 +194,6 @@ class JSSecretScanner:
             })
 
     def run(self, target: str) -> dict[str, Any]:
-        """Discover JS files and scan them for secrets."""
         target = sanitize_target(target)
         base_url = (
             target
@@ -228,12 +208,10 @@ class JSSecretScanner:
             "findings": [],
         }
 
-        # Phase 1: Discover JS files
         js_urls = self._discover_js_files(base_url)
         result["js_files_discovered"] = len(js_urls)
 
-        # Phase 2: Fetch and scan each JS file
-        seen_secrets: set[str] = set()  # de-dup by (pattern_title, matched_value)
+        seen_secrets: set[str] = set()
         for js_url in js_urls[: self.max_js_files]:
             try:
                 resp = self.session.get(js_url, timeout=self.timeout)
@@ -245,7 +223,6 @@ class JSSecretScanner:
                 findings = self._scan_js_content(js_url, resp.text, seen_secrets)
                 result["findings"].extend(findings)
 
-                # Check for source map
                 sm_findings = self._check_source_map(js_url, resp.text)
                 result["findings"].extend(sm_findings)
 
@@ -255,12 +232,11 @@ class JSSecretScanner:
         return result
 
     def _discover_js_files(self, base_url: str) -> list[str]:
-        """Find JS files by crawling HTML pages and extracting <script src=...>."""
         js_urls: set[str] = set()
         visited: set[str] = set()
         queue: deque[str] = deque([base_url])
         origin = urlparse(base_url).netloc
-        max_pages = 30  # Don't crawl too deep, just enough to find JS
+        max_pages = 30
 
         while queue and len(visited) < max_pages:
             url = queue.popleft()
@@ -277,29 +253,24 @@ class JSSecretScanner:
 
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            # Extract script sources
             for script in soup.find_all("script", src=True):
                 src = script["src"]
                 abs_url = urljoin(resp.url, src)
-                # Accept same-origin and CDN JS files
                 parsed = urlparse(abs_url)
                 if parsed.netloc == origin or abs_url.endswith(".js"):
                     js_urls.add(abs_url)
 
-            # Also look for JS files in link tags (preload)
             for link in soup.find_all("link", {"as": "script"}):
                 href = link.get("href", "")
                 if href:
                     js_urls.add(urljoin(resp.url, href))
 
-            # Follow links for more pages (limited)
             for tag in soup.find_all("a", href=True):
                 href = urljoin(resp.url, tag["href"])
                 parsed = urlparse(href)
                 if parsed.netloc == origin and href not in visited:
                     queue.append(href)
 
-        # Also check common JS paths
         common_js_paths = [
             "/static/js/main.js", "/static/js/app.js", "/static/js/bundle.js",
             "/assets/js/app.js", "/js/app.js", "/js/main.js",
@@ -321,7 +292,6 @@ class JSSecretScanner:
     def _scan_js_content(
         self, js_url: str, content: str, seen: set[str],
     ) -> list[dict]:
-        """Run all secret patterns against JS file content."""
         findings: list[dict] = []
 
         for regex, cat, title, sev, cvss, desc in _SECRET_PATTERNS:
@@ -331,7 +301,6 @@ class JSSecretScanner:
                 if dedup_key in seen:
                     continue
 
-                # False positive check
                 if cat == "exposed_secret" and _is_false_positive(matched):
                     continue
                 if cat == "endpoint_disclosure" and _is_false_positive(matched):
@@ -339,7 +308,6 @@ class JSSecretScanner:
 
                 seen.add(dedup_key)
 
-                # Get surrounding context (±100 chars)
                 start = max(0, m.start() - 80)
                 end = min(len(content), m.end() + 80)
                 context = content[start:end].replace("\n", " ").strip()
@@ -361,7 +329,6 @@ class JSSecretScanner:
         return findings
 
     def _check_source_map(self, js_url: str, content: str) -> list[dict]:
-        """Check if JS file references a source map that is publicly accessible."""
         findings: list[dict] = []
         m = SOURCE_MAP_RE.search(content)
         if not m:
@@ -369,17 +336,15 @@ class JSSecretScanner:
 
         map_ref = m.group(1)
         if map_ref.startswith("data:"):
-            return findings  # inline source map — not a leak
+            return findings
 
         map_url = urljoin(js_url, map_ref)
         try:
             resp = self.session.get(map_url, timeout=self.timeout)
             if resp.status_code == 200 and len(resp.content) > 100:
-                # Verify it looks like a real source map
                 ct = resp.headers.get("Content-Type", "")
                 text = resp.text[:500]
                 if "mappings" in text or "sources" in text or "json" in ct:
-                    # Count source files referenced
                     source_count = text.count('"sources"')
                     findings.append({
                         "vuln_id": "JS-005",
@@ -409,7 +374,6 @@ class JSSecretScanner:
 
     @staticmethod
     def _vuln_id(category: str) -> str:
-        """Map category to vuln_id prefix."""
         return {
             "exposed_secret": "JS-001",
             "info_disclosure": "JS-002",

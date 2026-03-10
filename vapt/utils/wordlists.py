@@ -1,16 +1,8 @@
-"""
-Massive wordlist library for directory brute-force, file discovery, and parameter fuzzing.
-
-Contains 3,000+ paths organized by category for maximum discovery coverage.
-Comparable to SecLists/common.txt + Discovery/Web-Content + custom additions.
-"""
 
 from __future__ import annotations
 
-# DIRECTORY PATHS — Common webapp directories
 
 DIRECTORIES = [
-    # Admin panels
     "admin", "administrator", "admin1", "admin2", "admin_area", "adminarea",
     "admin-panel", "adminpanel", "admin-login", "admin-console", "admin/login",
     "admin/dashboard", "admin/config", "admin/settings", "admin/users",
@@ -19,14 +11,12 @@ DIRECTORIES = [
     "moderator", "webadmin", "sysadmin", "siteadmin", "adminsite",
     "backend", "backoffice", "dashboard", "panel",
     
-    # Authentication
     "login", "signin", "signup", "register", "auth", "authenticate",
     "logout", "signout", "password", "forgot-password", "reset-password",
     "account", "accounts", "profile", "user", "users", "member", "members",
     "my-account", "myaccount", "settings", "preferences",
     "oauth", "oauth2", "sso", "saml", "cas", "openid",
     
-    # API
     "api", "api/v1", "api/v2", "api/v3", "api/v4", "api/latest",
     "api/auth", "api/login", "api/register", "api/users", "api/admin",
     "api/config", "api/status", "api/health", "api/info", "api/docs",
@@ -40,7 +30,6 @@ DIRECTORIES = [
     "openapi", "openapi.json", "openapi.yaml",
     "api-docs", "apidocs", "api-doc", "redoc",
     
-    # Content Management
     "wp-admin", "wp-login.php", "wp-content", "wp-includes",
     "wp-json", "wp-config.php.bak", "xmlrpc.php",
     "wp-content/uploads", "wp-content/plugins", "wp-content/themes",
@@ -50,7 +39,6 @@ DIRECTORIES = [
     "magento", "magento2", "downloader",
     "typo3", "typo3conf", "fileadmin",
     
-    # Development / Debug
     "debug", "test", "testing", "dev", "development", "staging",
     "demo", "sandbox", "beta", "alpha", "preview",
     "phpinfo", "phpinfo.php", "info.php", "test.php",
@@ -58,7 +46,6 @@ DIRECTORIES = [
     "phpmyadmin", "phpMyAdmin", "pma", "mysql", "adminer",
     "adminer.php", "dbadmin",
     
-    # Source / Configuration
     ".git", ".git/HEAD", ".git/config", ".git/index",
     ".svn", ".svn/entries", ".svn/wc.db",
     ".hg", ".hg/store", ".bzr",
@@ -79,7 +66,6 @@ DIRECTORIES = [
     "gulpfile.js", "gruntfile.js", "babel.config.js",
     ".babelrc", ".eslintrc", ".prettierrc",
     
-    # Backup / Temp
     "backup", "backups", "bak", "old", "temp", "tmp",
     "archive", "archives", "dump", "dumps",
     "database.sql", "db.sql", "backup.sql", "dump.sql",
@@ -88,7 +74,6 @@ DIRECTORIES = [
     "backup.zip", "site.zip", "www.zip", "files.zip",
     "archive.zip", "data.zip", "upload.zip",
     
-    # Security
     "security", "security.txt", ".well-known/security.txt",
     "robots.txt", "sitemap.xml", "sitemap_index.xml",
     "crossdomain.xml", "clientaccesspolicy.xml",
@@ -96,14 +81,12 @@ DIRECTORIES = [
     ".well-known", ".well-known/openid-configuration",
     ".well-known/assetlinks.json", ".well-known/apple-app-site-association",
     
-    # File upload / Media
     "upload", "uploads", "files", "documents", "docs",
     "images", "img", "media", "static", "assets",
     "content", "data", "resources", "public",
     "downloads", "download", "attachments",
     "storage", "store", "cdn",
     
-    # Server
     "server-status", "server-info", "status", "health",
     "healthcheck", "health-check", "ping", "heartbeat",
     "metrics", "monitoring", "monitor", "stats",
@@ -113,12 +96,10 @@ DIRECTORIES = [
     "actuator/metrics", "actuator/logfile", "actuator/heapdump",
     "jolokia", "jolokia/list",
     
-    # E-commerce
     "cart", "checkout", "shop", "store", "products",
     "catalog", "orders", "order", "payment", "pay",
     "invoice", "billing", "subscription",
     
-    # Misc
     "cgi-bin", "cgi", "bin", "scripts",
     "include", "includes", "inc", "lib", "libs", "library",
     "vendor", "node_modules", "bower_components",
@@ -147,17 +128,14 @@ DIRECTORIES = [
     "internal", "private", "hidden", "restricted",
 ]
 
-# SENSITIVE FILES — Files that should never be public
 
 SENSITIVE_FILES = [
-    # Version control
     ".git/HEAD", ".git/config", ".git/index", ".git/logs/HEAD",
     ".git/COMMIT_EDITMSG", ".git/description", ".git/info/refs",
     ".git/packed-refs", ".git/refs/heads/master", ".git/refs/heads/main",
     ".svn/entries", ".svn/wc.db", ".svn/pristine",
     ".hg/store/00manifest.i", ".hg/dirstate",
     
-    # Environment / Config
     ".env", ".env.local", ".env.production", ".env.staging",
     ".env.development", ".env.test", ".env.backup", ".env.bak",
     ".env.old", ".env.save", ".env.swp", ".env~",
@@ -177,7 +155,6 @@ SENSITIVE_FILES = [
     "secrets.yml", "credentials.yml",
     "master.key", "credentials.yml.enc",
     
-    # Private Keys / Certificates
     "id_rsa", "id_rsa.pub", "id_dsa", "id_dsa.pub",
     "id_ecdsa", "id_ecdsa.pub", "id_ed25519",
     "server.key", "server.pem", "server.crt",
@@ -186,7 +163,6 @@ SENSITIVE_FILES = [
     "keystore.jks", "truststore.jks",
     ".ssh/id_rsa", ".ssh/authorized_keys", ".ssh/known_hosts",
     
-    # Database
     "database.sql", "dump.sql", "backup.sql",
     "db.sqlite", "db.sqlite3", "database.db",
     "data.db", "app.db", "development.db",
@@ -194,7 +170,6 @@ SENSITIVE_FILES = [
     "db.json", "data.json",
     "redis.conf", "mongod.conf",
     
-    # Logs
     "access.log", "error.log", "debug.log",
     "application.log", "app.log", "server.log",
     "catalina.out", "catalina.log",
@@ -202,7 +177,6 @@ SENSITIVE_FILES = [
     "npm-debug.log", "yarn-error.log",
     "php_errors.log", "php-errors.log",
     
-    # Package files (dependency info)
     "package.json", "package-lock.json", "yarn.lock",
     "composer.json", "composer.lock",
     "Gemfile", "Gemfile.lock",
@@ -210,7 +184,6 @@ SENSITIVE_FILES = [
     "go.mod", "go.sum",
     "pom.xml", "build.gradle",
     
-    # Cloud / DevOps
     ".aws/credentials", ".aws/config",
     ".docker/config.json",
     "docker-compose.yml", "docker-compose.override.yml",
@@ -225,7 +198,6 @@ SENSITIVE_FILES = [
     "deploy.sh", "deploy.yml",
     "Procfile", "app.yaml", "app.json",
     
-    # IDE / Editor
     ".idea/workspace.xml", ".idea/modules.xml",
     ".vscode/settings.json", ".vscode/launch.json",
     ".project", ".classpath",
@@ -233,34 +205,28 @@ SENSITIVE_FILES = [
     "*~", "*.bak", "*.old", "*.save",
     ".DS_Store", "Thumbs.db", "desktop.ini",
     
-    # PHP
     "phpinfo.php", "info.php", "test.php", "debug.php",
     "i.php", "pi.php", "php.ini",
     "php-fpm.conf", ".user.ini",
     
-    # Java / Spring
     "WEB-INF/web.xml", "WEB-INF/applicationContext.xml",
     "META-INF/MANIFEST.MF", "META-INF/context.xml",
     "struts.xml", "struts-config.xml",
     "faces-config.xml", "beans.xml",
     
-    # Python / Django / Flask
     "__pycache__", "*.pyc",
     "manage.py", "wsgi.py", "asgi.py",
     "celery.py", "celeryconfig.py",
     
-    # Node.js
     "server.js", "app.js", "index.js",
     ".npmrc", ".yarnrc",
     "nodemon.json", "pm2.json",
     
-    # Ruby / Rails
     "Rakefile", "config/database.yml",
     "config/secrets.yml", "config/master.key",
     "config/credentials.yml.enc",
     "config/initializers/secret_token.rb",
     
-    # Misc
     "crossdomain.xml", "clientaccesspolicy.xml",
     "elmah.axd", "trace.axd",
     "error_log", "access_log",
@@ -270,56 +236,47 @@ SENSITIVE_FILES = [
     "VERSION", "RELEASE_NOTES",
 ]
 
-# PARAMETER NAMES — Common parameter names for fuzzing 
 
 FUZZ_PARAMS = [
-    # Authentication
     "username", "user", "login", "email", "mail",
     "password", "passwd", "pass", "pwd", "secret",
     "token", "auth", "key", "api_key", "apikey",
     "access_token", "refresh_token", "session",
     "csrf_token", "csrf", "_token",
     
-    # Data access
     "id", "uid", "user_id", "userid", "account",
     "account_id", "profile_id", "order_id",
     "file", "filename", "path", "filepath",
     "dir", "directory", "folder", "doc", "document",
     "page", "p", "pg", "num", "number",
     
-    # Injection vectors
     "q", "query", "search", "keyword", "term",
     "s", "find", "filter", "sort", "order",
     "category", "cat", "type", "name",
     "title", "content", "body", "text", "message",
     "comment", "description", "value", "data",
     
-    # URL / Redirect
     "url", "uri", "link", "src", "source",
     "dest", "destination", "redirect", "redirect_url",
     "redirect_uri", "return", "return_url", "returnUrl",
     "next", "goto", "target", "to", "out",
     "continue", "callback", "cb", "ref", "referrer",
     
-    # File operations
     "upload", "download", "export", "import",
     "template", "preview", "view", "show",
     "read", "write", "edit", "delete", "remove",
     "action", "cmd", "command", "exec", "run",
     "process", "do", "func", "function",
     
-    # Format / Encoding
     "format", "output", "type", "mode",
     "encoding", "charset", "lang", "language",
     "locale", "timezone", "tz",
     "json", "xml", "csv", "html",
     
-    # Debug
     "debug", "test", "verbose", "trace",
     "log", "level", "env", "config",
 ]
 
-# SUBDOMAIN WORDLIST — Common subdomains
 
 SUBDOMAINS = [
     "www", "mail", "ftp", "smtp", "pop", "imap",
@@ -366,7 +323,6 @@ SUBDOMAINS = [
     "node", "node1", "node2", "worker", "worker1",
 ]
 
-# TECHNOLOGY-SPECIFIC PATHS
 
 TECH_PATHS = {
     "wordpress": [
@@ -445,7 +401,6 @@ TECH_PATHS = {
     ],
 }
 
-# FILE EXTENSIONS TO TEST
 
 EXTENSIONS = [
     ".php", ".asp", ".aspx", ".jsp", ".do", ".action",
@@ -461,7 +416,6 @@ EXTENSIONS = [
     ".env", ".inc", ".dist",
 ]
 
-# BACKUP FILE PATTERNS (generate from base name)
 
 BACKUP_SUFFIXES = [
     ".bak", ".backup", ".old", ".orig", ".original",
@@ -474,7 +428,6 @@ BACKUP_SUFFIXES = [
 
 
 def get_full_wordlist() -> list[str]:
-    """Get the complete combined wordlist."""
     all_paths = set()
     all_paths.update(DIRECTORIES)
     all_paths.update(SENSITIVE_FILES)
@@ -484,7 +437,6 @@ def get_full_wordlist() -> list[str]:
 
 
 def get_wordlist_for_tech(technology: str) -> list[str]:
-    """Get technology-specific wordlist."""
     tech = technology.lower()
     base = list(DIRECTORIES) + list(SENSITIVE_FILES)
     if tech in TECH_PATHS:
@@ -493,11 +445,9 @@ def get_wordlist_for_tech(technology: str) -> list[str]:
 
 
 def generate_backup_names(filename: str) -> list[str]:
-    """Generate backup file name variants for a given filename."""
     variants = []
     for suffix in BACKUP_SUFFIXES:
         variants.append(f"{filename}{suffix}")
-    # Also try with date-like patterns
     variants.append(f"{filename}.2024")
     variants.append(f"{filename}.2025")
     variants.append(f"{filename}.2026")

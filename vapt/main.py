@@ -1,5 +1,3 @@
-"""VAPT CLI entry point and command definitions."""
-
 from __future__ import annotations
 
 import json as _json
@@ -70,12 +68,10 @@ from vapt.scanner.sslscan import SSLScanner
 from vapt.scanner.takeover import SubdomainTakeoverScanner
 from vapt.scanner.webscan import WebScanner
 from vapt.engine.intelligence import IntelligenceEngine
-from vapt.engine.elite_intelligence import EliteIntelligenceEngine
 from vapt.engine.smart_hunt import SmartHuntOrchestrator
 from vapt.scanner.bizscan import BusinessLogicScanner
 from vapt.scanner.deepjs import DeepJSRecon
 from vapt.scanner.authflow import AuthFlowScanner
-from vapt.engine.oob import OOBManager
 from vapt.reporting.elite_report import EliteReportGenerator
 from vapt.utils.auth import AuthManager
 from vapt.utils.helpers import generate_scan_id, utcnow
@@ -108,13 +104,10 @@ def main(
         None, "--version", "-v", callback=version_callback, is_eager=True
     ),
 ) -> None:
-    """VAPT CLI — The ultimate vulnerability assessment toolkit."""
+    pass
 
-
-# Shared helpers
 
 def _risk_color(level: str) -> str:
-    """Return a Rich colour tag for severity."""
     return {
         "critical": "bold red",
         "high": "bold yellow",
@@ -131,11 +124,9 @@ def _build_aggregate(
     started_at: datetime,
     all_findings: list[dict],
 ) -> dict:
-    """Enrich, score, correlate, and map findings to compliance frameworks."""
     kb = KnowledgeBase()
     enriched = kb.match_findings(all_findings)
 
-    # Intelligence engine — deep severity analysis, chain detection, FP elimination
     intel = IntelligenceEngine()
     intel_result = intel.analyze(enriched)
     enriched = intel_result["findings"]
@@ -151,7 +142,6 @@ def _build_aggregate(
 
     finished_at = utcnow()
 
-    # Merge attack chains from both correlator and intelligence engine
     all_chains = correlation["attack_chains"] + intel_result.get("chains", [])
 
     return {
@@ -174,12 +164,10 @@ def _build_aggregate(
 
 
 def _show_findings_table(findings: list[dict]) -> None:
-    """Print a rich table of the most important findings."""
     if not findings:
         console.print("[dim]No findings to display.[/dim]")
         return
 
-    # Sort by severity weight then CVSS
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     sorted_findings = sorted(
         findings,
@@ -201,7 +189,7 @@ def _show_findings_table(findings: list[dict]) -> None:
     tbl.add_column("Title", ratio=3)
     tbl.add_column("Category", width=14)
 
-    for idx, f in enumerate(sorted_findings[:50], 1):  # Show top 50
+    for idx, f in enumerate(sorted_findings[:50], 1):
         sev = f.get("severity", "info")
         cvss = f.get("cvss_score", 0)
         tbl.add_row(
@@ -226,8 +214,6 @@ def _generate_and_display(
     notify: bool,
     auto_open: bool = True,
 ) -> None:
-    """Generate reports, display summary dashboard, optionally open in browser."""
-    # Always include JSON for re-reporting
     formats = list({f.strip() for f in report_format.split(",")})
     if "json" not in formats:
         formats.append("json")
@@ -250,7 +236,6 @@ def _generate_and_display(
     total = aggregate.get("total_findings", len(aggregate.get("findings", [])))
     sev_counts = aggregate.get("severity_counts", {})
 
-    # Header panel
     header_text = Text()
     header_text.append("  SCAN COMPLETE  ", style="bold white on green")
     header_text.append(f"\n\n  Target:   {aggregate['target']}")
@@ -262,7 +247,6 @@ def _generate_and_display(
     header_text.append(f"  ({score}/100)")
     console.print(Panel(header_text, title="[bold cyan]VAPT CLI Results[/bold cyan]", border_style="cyan"))
 
-    # Severity breakdown
     sev_tbl = Table(show_header=True, header_style="bold magenta", width=40)
     sev_tbl.add_column("Severity", style="bold")
     sev_tbl.add_column("Count", justify="right")
@@ -282,17 +266,14 @@ def _generate_and_display(
         sev_tbl.add_row(tbl_row_sev, str(cnt), bar)
     console.print(sev_tbl)
 
-    # Top findings table
     _show_findings_table(aggregate.get("findings", []))
 
-    # Attack chains
     chains = aggregate.get("attack_chains", [])
     if chains:
         console.print(f"\n[bold red]⚠ {len(chains)} attack chain(s) detected[/bold red]")
         for chain in chains[:5]:
             console.print(f"  [red]→[/red] {chain.get('name', chain.get('description', ''))}")
 
-    # Intelligence recommendations
     recs = aggregate.get("recommendations", [])
     if recs:
         console.print(f"\n[bold yellow]Prioritized Recommendations ({len(recs)}):[/bold yellow]")
@@ -302,7 +283,6 @@ def _generate_and_display(
             p_label = {1: "🔴 P1", 2: "🟠 P2", 3: "🟡 P3", 4: "🟢 P4"}.get(priority, f"P{priority}")
             console.print(f"  {p_label} [{_risk_color(sev)}]{rec.get('title', '')}[/]")
 
-    # Report paths
     console.print("\n[bold]Reports generated:[/bold]")
     for fmt, path in paths.items():
         console.print(f"  [dim]{fmt:18}[/dim] → {path}")
@@ -327,10 +307,6 @@ def _run_module(
     all_findings: list[dict],
     timings: dict[str, float],
 ) -> dict | None:
-    """Run a single scanner module inside the progress bar.
-
-    Returns the raw result dict (for recon chaining) or None on error.
-    """
     label = f"[cyan]{name}…"
     task = prog.add_task(label, total=None)
     t0 = time.time()
@@ -349,8 +325,6 @@ def _run_module(
         prog.update(task, description=f"[yellow]⚠ {name} (error, {elapsed:.1f}s)")
     return result
 
-
-# vapt scan — THE ULTIMATE ONE-COMMAND SCANNER
 
 @app.command("scan")
 def cmd_scan(
@@ -457,52 +431,12 @@ def cmd_scan(
         help="Safety profile: aggressive|standard|meesho|optus|hackerone|bugcrowd. Controls which attacks are allowed.",
     ),
 ) -> None:
-    """
-    Run a FULL vulnerability assessment — everything in one command.
-
-    \b
-    This single command runs ALL of these modules automatically:
-      1. Authentication    — login with form/bearer/cookie/OAuth2/basic/digest
-      2. WAF Detection     — detect & bypass Cloudflare, AWS WAF, Akamai, etc.
-      3. Reconnaissance    — DNS, WHOIS, subdomains, tech fingerprinting
-      4. Port Scanning     — open ports, banners, default credentials
-      5. SSL/TLS Analysis  — certificates, protocols, ciphers, HSTS
-      6. Web Scanning      — crawl + attack: SQLi, XSS, SSTI, SSRF, XXE, RCE…
-      7. DOM/Client Scan   — DOM XSS, prototype pollution, exposed secrets, postMessage…
-      8. Auth Scanning     — CSRF, CORS, IDOR, JWT, OAuth, session, defaults, MFA bypass…
-      9. API Scanning      — BOLA, JWT, GraphQL, mass assignment, verb tampering…
-     10. Fuzzing           — directory brute-force, hidden files, IDOR testing
-     11. Race Conditions   — double-spend, rate limit bypass, TOCTOU exploits
-     12. HTTP Smuggling    — CL.TE, TE.CL, TE.TE, H2 downgrade, CRLF splitting
-     13. Cloud Scanning    — S3 buckets, Azure blobs, GCP, Firebase, subdomain takeover
-     14. CVE Detection     — banner fingerprinting + NVD API lookups
-     15. Plugin Checks     — custom YAML/Python security checks
-     16. Validation        — re-confirm ALL findings with HIGH confidence
-     17. Correlation       — chain findings into attack paths
-     18. Compliance        — OWASP Top 10, SANS 25, PCI-DSS mapping
-     19. Reporting         — HTML + JSON + Bug Bounty markdown + per-finding reports
-
-    \b
-    With --deep, discovered subdomains will ALSO be scanned (web + API + fuzz).
-    With --stealth, requests are throttled and randomized to avoid detection.
-    With --waf-bypass, payloads are encoded/mutated to evade WAF rules.
-    With --validate, findings are re-tested to filter false positives.
-
-    \b
-    Examples:
-      vapt scan -t example.com
-      vapt scan -t https://api.example.com --token "Bearer eyJ…"
-      vapt scan -t 192.168.1.1 -p 1-65535 --deep
-      vapt scan -t example.com --auth form --login-url https://example.com/login -u admin -P pass
-      vapt scan -t example.com --stealth stealth --waf-bypass --validate
-      vapt scan -t example.com --deep --format html,pdf,json --executive --notify
-    """
 
     print_banner(console)
 
     if fast:
         if stealth == "polite" or stealth == "stealth":
-            stealth = "normal"  # upgrade to faster rate
+            stealth = "normal"
             console.print("  [yellow]⚡ Fast mode: stealth upgraded to 'normal' (10 req/s)[/yellow]")
 
     ok, normalized = validate_target(target)
@@ -630,7 +564,6 @@ def cmd_scan(
             if recon_result:
                 discovered_subdomains = recon_result.get("subdomains", [])
                 techs = recon_result.get("technologies", [])
-                # Filter discovered subdomains through scope
                 if scope.out_of_scope:
                     discovered_subdomains = [
                         s for s in discovered_subdomains if is_in_scope(s, scope)
@@ -837,14 +770,12 @@ def cmd_scan(
 
     pre_safety_count = len(all_findings)
     if show_all:
-        # --show-all: keep filtered findings but mark them
         _, safety_removed = filter_findings_by_safety(all_findings, safety_profile)
         if safety_removed:
             console.print(
                 f"  [yellow]⊘ {safety_removed} findings would be removed by safety profile "
                 f"(kept because --show-all)[/yellow]"
             )
-            # Mark out-of-scope findings
             kept, _ = filter_findings_by_safety(all_findings, safety_profile)
             kept_set = {id(f) for f in kept}
             for f in all_findings:
@@ -897,7 +828,6 @@ def cmd_scan(
     for mod, secs in timings.items():
         console.print(f"  [dim]{mod:30} {secs:6.1f}s[/dim]")
 
-    # Show stealth/rate limiter stats
     if stealth != "normal" or waf_bypass:
         rl_stats = stealth_session.stats
         console.print(f"\n[dim]Rate limiter: {rl_stats['total_requests']} requests, "
@@ -906,7 +836,6 @@ def cmd_scan(
 
     aggregate = _build_aggregate(scan_id, target, started_at, all_findings)
 
-    # Add extra metadata
     if discovered_subdomains:
         aggregate["subdomains_discovered"] = discovered_subdomains
         aggregate["subdomains_scanned"] = (
@@ -937,7 +866,7 @@ def cmd_scan(
 
     _generate_and_display(
         aggregate, output_dir, report_format,
-        executive=executive or deep,  # always executive in deep mode
+        executive=executive or deep,
         notify=notify,
     )
 
@@ -946,20 +875,16 @@ def cmd_scan(
         bounty_md_path = bounty_gen.generate_full_report(aggregate, output_format="md")
         console.print(f"  [bold green]Bug Bounty Report:[/bold green] {bounty_md_path}")
 
-        # Generate FIELD: format reports for HackerOne copy-paste
         if aggregate.get("findings"):
             bounty_gen.generate_full_report(aggregate, output_format="field")
             console.print(f"  [bold green]HackerOne Reports:[/bold green] FIELD: format (.txt) generated")
 
-        # Generate per-finding individual reports for HackerOne/Bugcrowd
         if aggregate.get("findings"):
             indiv_paths = bounty_gen.generate_per_finding_reports(aggregate)
             console.print(f"  [bold green]Individual Reports:[/bold green] {len(indiv_paths)} files")
     except Exception as exc:
         console.print(f"  [yellow]⚠ Bounty report warning: {exc}[/yellow]")
 
-
-# Individual module commands (still available if someone wants one thing)
 
 def _single_module_scan(
     module_name: str,
@@ -969,7 +894,6 @@ def _single_module_scan(
     report_format: str,
     safety: str = "standard",
 ) -> None:
-    """Shared logic for single-module commands."""
     print_banner(console)
     ok, normalized = validate_target(target)
     if not ok:
@@ -999,11 +923,9 @@ def _single_module_scan(
     ) as prog:
         _run_module(module_name, lambda: runner_fn(normalized, safety_config), prog, all_findings, timings)
 
-    # Enrich findings with evidence & PoC
     if all_findings:
         all_findings = enrich_all_findings(all_findings)
 
-    # Safety filtering
     all_findings, _ = filter_findings_by_safety(all_findings, safety_profile)
 
     aggregate = _build_aggregate(scan_id, normalized, started_at, all_findings)
@@ -1016,7 +938,6 @@ def cmd_recon(
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
     report_format: str = typer.Option("html", "--format", "-f"),
 ) -> None:
-    """Recon and asset discovery only."""
     print_banner(console)
     ok, normalized = validate_target(target)
     if not ok:
@@ -1055,7 +976,6 @@ def cmd_portscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Port and service scan only."""
     _single_module_scan("Port Scan", lambda t, sc: PortScanner().run(t, ports), target, output_dir, report_format, safety)
 
 
@@ -1066,7 +986,6 @@ def cmd_sslscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """SSL/TLS deep analysis only."""
     _single_module_scan("SSL/TLS Scan", lambda t, sc: SSLScanner().run(t), target, output_dir, report_format, safety)
 
 
@@ -1077,7 +996,6 @@ def cmd_webscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Web vulnerability scan only."""
     _single_module_scan("Web Scan", lambda t, sc: WebScanner(safety_config=sc).run(t), target, output_dir, report_format, safety)
 
 
@@ -1089,7 +1007,6 @@ def cmd_apiscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """API security scan only."""
     _single_module_scan("API Scan", lambda t, sc: APIScanner(safety_config=sc).run(t, token=token), target, output_dir, report_format, safety)
 
 
@@ -1100,7 +1017,6 @@ def cmd_fuzz(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Directory brute-force, file enumeration, and IDOR testing."""
     _single_module_scan("Fuzzer", lambda t, sc: Fuzzer(safety_config=sc).run(t), target, output_dir, report_format, safety)
 
 
@@ -1111,7 +1027,6 @@ def cmd_cloudscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Cloud misconfiguration scanner (S3, Azure, GCP, Firebase, subdomain takeover)."""
     _single_module_scan(
         "Cloud Scan",
         lambda t, sc: {"findings": CloudScanner(t).run()},
@@ -1126,7 +1041,6 @@ def cmd_domscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """DOM XSS, prototype pollution, exposed secrets, and client-side security."""
     _single_module_scan(
         "DOM/Client-Side",
         lambda t, sc: DOMScanner().run(t),
@@ -1141,7 +1055,6 @@ def cmd_authscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """CSRF, CORS, IDOR, JWT, OAuth, session, default creds, MFA bypass scanner."""
     _single_module_scan(
         "Auth Scan",
         lambda t, sc: AuthScanner(safety_config=sc).run(t),
@@ -1156,7 +1069,6 @@ def cmd_racescan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Race condition testing — double-spend, rate limit bypass, TOCTOU."""
     _single_module_scan(
         "Race Condition",
         lambda t, sc: RaceScanner().run(t),
@@ -1171,7 +1083,6 @@ def cmd_smuggle(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """HTTP request smuggling — CL.TE, TE.CL, TE.TE, H2 downgrade."""
     _single_module_scan(
         "HTTP Smuggling",
         lambda t, sc: SmuggleScanner().run(t),
@@ -1186,7 +1097,6 @@ def cmd_advanced(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Advanced injections — NoSQL, LDAP, deserialization, CRLF, cache poisoning, CSP."""
     _single_module_scan(
         "Advanced Scanner",
         lambda t, sc: AdvancedScanner(safety_config=sc).run(t),
@@ -1201,7 +1111,6 @@ def cmd_infrascan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Infrastructure scanner — actuators, admin panels, config files, debug endpoints, backups."""
     _single_module_scan(
         "Infrastructure Scan",
         lambda t, sc: InfraScanner(safety_config=sc).run(t),
@@ -1217,7 +1126,6 @@ def cmd_dbscan(
     report_format: str = typer.Option("html", "--format", "-f"),
     safety: str = typer.Option("standard", "--safety", help="Safety profile name"),
 ) -> None:
-    """Database scanner — exposed DBs, no-auth access, default creds, DB admin panels."""
     _single_module_scan(
         "Database Scan",
         lambda t, sc: DatabaseScanner(safety_config=sc).run(t, ports=ports),
@@ -1231,7 +1139,6 @@ def cmd_mobilescan(
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
     report_format: str = typer.Option("html", "--format", "-f"),
 ) -> None:
-    """Mobile app scanner — static analysis of Android APK or iOS IPA files."""
     from pathlib import Path as P
     print_banner(console)
 
@@ -1271,26 +1178,10 @@ def cmd_mobilescan(
     _generate_and_display(aggregate, output_dir, report_format, False, False)
 
 
-# vapt hunt — INTERACTIVE BUG BOUNTY HUNTING MODE
-
 @app.command("hunt")
 def cmd_hunt(
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
 ) -> None:
-    """
-    Interactive bug bounty hunting mode.
-
-    \b
-    Launch this when you find a new bug bounty program. It will:
-      1. Ask you for the program details (scope, platform, restrictions)
-      2. Build the optimal scanning strategy
-      3. Run a complete automated hunt
-      4. Generate HackerOne/Bugcrowd-ready reports for every finding
-
-    \b
-    Example:
-      vapt hunt
-    """
     print_banner(console)
 
     console.print(Panel(
@@ -1466,7 +1357,7 @@ def cmd_hunt(
         "1": "recon,ssl,web,dom,fuzz,jsscan,cve,plugins",
         "2": "recon,ssl,web,dom,auth,api,fuzz,jsscan,cve,plugins",
         "3": "recon,port,ssl,web,dom,auth,api,fuzz,jsscan,cloud,cve,infra,db,plugins",
-        "4": None,  # All modules
+        "4": None,
     }
     modules_str = modules_for_type.get(hunt_type)
 
@@ -1477,7 +1368,6 @@ def cmd_hunt(
         console.print(f"[bold cyan]Target {target_idx}/{len(in_scope)}: {target}[/bold cyan]")
         console.print(f"{'='*60}\n")
 
-        # Build the scan command args
         scan_kwargs = {
             "target": target,
             "ports": "21,22,23,25,53,80,110,143,443,445,993,995,3306,3389,5432,5900,6379,8080,8443,9200,27017",
@@ -1529,37 +1419,10 @@ def cmd_hunt(
     ))
 
 
-# vapt elite — GOLD ELITE EDITION HUNTING
-
 @app.command("elite")
 def cmd_elite(
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
 ) -> None:
-    """
-    Gold Elite Edition — strategic bug bounty hunting.
-
-    \b
-    Unlike 'hunt' which runs all scanners broadly, 'elite' uses a
-    strategic 8-phase pipeline designed to find NOVEL bugs:
-
-    \b
-      Phase 1: Deep JS Reconnaissance — map entire attack surface
-      Phase 2: Endpoint Intelligence — classify by business value
-      Phase 3: Authenticated Testing — IDOR, privilege escalation
-      Phase 4: Business Logic — race conditions, amount manipulation
-      Phase 5: OOB Testing — blind SSRF/XSS/XXE confirmation
-      Phase 6: Targeted Scanning — focused on sensitive endpoints only
-      Phase 7: Elite Intelligence — novelty scoring, duplicate filtering
-      Phase 8: Report Generation — submission-ready with intelligence
-
-    \b
-    Every finding is scored for novelty and duplicate risk.
-    Only NOVEL findings are reported. Common duplicates are suppressed.
-
-    \b
-    Example:
-      vapt elite
-    """
     print_banner(console)
 
     console.print(Panel(
@@ -1647,7 +1510,7 @@ def cmd_elite(
             auth_method = "bearer"
             console.print("\n  [bold]Account A (primary):[/bold]")
             token_a = typer.prompt("    Bearer token")
-            cookies_a = f"__bearer__:{token_a}"  # Encode as special cookie format
+            cookies_a = f"__bearer__:{token_a}"
             console.print("\n  [bold]Account B (for IDOR testing, optional):[/bold]")
             token_b = typer.prompt("    Bearer token (empty to skip)", default="")
             if token_b:
@@ -1718,7 +1581,6 @@ def cmd_elite(
         scope_out=scope_out,
     )
 
-    # Set up authentication
     import requests as _requests
 
     if auth_method == "form" and login_url and email_a and password_a:
@@ -1752,7 +1614,6 @@ def cmd_elite(
 
         hunt.setup_auth(session_a=session_a, session_b=session_b)
     elif auth_method == "bearer" and cookies_a:
-        # Decode special bearer format
         token_a = cookies_a.replace("__bearer__:", "")
         session_a = _requests.Session()
         session_a.headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
@@ -1771,7 +1632,6 @@ def cmd_elite(
 
         hunt.setup_auth(session_a=session_a, session_b=session_b)
 
-    # Execute the elite pipeline
     try:
         results = hunt.execute()
     except KeyboardInterrupt:
@@ -1783,7 +1643,6 @@ def cmd_elite(
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
         raise typer.Exit(1)
 
-    # Generate elite reports
     try:
         report_gen = EliteReportGenerator(output_dir=output_dir)
         report_paths = report_gen.generate_elite_reports(
@@ -1816,7 +1675,6 @@ def cmd_bizscan(
     target: str = typer.Option(..., "--target", "-t"),
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
 ) -> None:
-    """Run the business logic vulnerability scanner."""
     print_banner(console)
     console.print(f"[cyan]Running business logic scan on {target}...[/cyan]")
     scanner = BusinessLogicScanner()
@@ -1833,7 +1691,6 @@ def cmd_deepjs(
     target: str = typer.Option(..., "--target", "-t"),
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
 ) -> None:
-    """Deep JavaScript reconnaissance — mine endpoints from JS files."""
     print_banner(console)
     console.print(f"[cyan]Running deep JS recon on {target}...[/cyan]")
     recon = DeepJSRecon()
@@ -1855,7 +1712,6 @@ def cmd_authflow(
     target: str = typer.Option(..., "--target", "-t"),
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
 ) -> None:
-    """Test authentication flows for IDOR, privilege escalation, session issues."""
     print_banner(console)
     console.print(f"[cyan]Running auth flow scanner on {target}...[/cyan]")
     scanner = AuthFlowScanner()
@@ -1867,15 +1723,12 @@ def cmd_authflow(
         console.print(f"  [{_risk_color(sev)}]{sev.upper()}[/] {f.get('title', '')}")
 
 
-# vapt report / monitor / update / db
-
 @app.command("report")
 def cmd_report(
     report_format: str = typer.Option("html", "--format", "-f", help="pdf|html|json"),
     scan_file: Optional[str] = typer.Option(None, "--scan-file", "-s"),
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
 ) -> None:
-    """Re-generate a report from a saved scan JSON file."""
     print_banner(console)
     if not scan_file:
         console.print("[yellow]Provide --scan-file <path> to a previous scan JSON.[/yellow]")
@@ -1910,7 +1763,6 @@ def cmd_monitor(
     target: str = typer.Option(..., "--target", "-t"),
     interval: int = typer.Option(86400, "--interval", "-i", help="Seconds between scans (default 24h)."),
 ) -> None:
-    """Continuously monitor a target for new vulnerabilities."""
     print_banner(console)
     ok, normalized = validate_target(target)
     if not ok:
@@ -1934,7 +1786,6 @@ def cmd_monitor(
 
 @app.command("update")
 def cmd_update() -> None:
-    """Update VAPT CLI, tools, and vulnerability signatures."""
     print_banner(console)
     console.print("[bold cyan]VAPT CLI Updater[/bold cyan]\n")
 
@@ -1968,7 +1819,6 @@ def cmd_update() -> None:
 def cmd_db(
     action: str = typer.Argument("status", help="status | seed | reset"),
 ) -> None:
-    """Manage the local knowledge base database."""
     if action == "seed":
         seed()
         console.print("[green]Knowledge base seeded.[/green]")
@@ -1985,9 +1835,6 @@ def cmd_db(
         raise typer.Exit(1)
 
 
-# ── Burp Suite replacement commands ──────────────────────
-
-
 @app.command("proxy")
 def cmd_proxy(
     port: int = typer.Option(8080, "--port", "-p", help="Proxy listen port"),
@@ -1995,7 +1842,6 @@ def cmd_proxy(
     verbose: bool = typer.Option(False, "--verbose", help="Debug logging"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Export flows to JSON on exit"),
 ) -> None:
-    """Start the intercepting HTTP/HTTPS proxy server."""
     from vapt.proxy.server import CertificateAuthority, ProxyServer
     from vapt.proxy.storage import ProxyStorage
 
@@ -2033,7 +1879,6 @@ def cmd_proxy(
 def cmd_tui(
     proxy_port: int = typer.Option(8080, "--port", "-p", help="Proxy port for the TUI"),
 ) -> None:
-    """Launch the interactive security testing console (TUI)."""
     from vapt.tui.app import launch_tui
     launch_tui(proxy_port=proxy_port)
 
@@ -2047,7 +1892,6 @@ def cmd_crawl(
     light: bool = typer.Option(False, "--light", help="Use lightweight requests-based crawler (no browser)"),
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o", help="Output directory"),
 ) -> None:
-    """Crawl a website — discover pages, forms, endpoints, and JS files."""
     from vapt.scanner.crawler import Crawler, CrawlerLight
 
     print_banner()
@@ -2111,7 +1955,6 @@ def cmd_intruder(
     grep: Optional[str] = typer.Option(None, "--grep", help="Regex pattern to grep in responses"),
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o", help="Output directory"),
 ) -> None:
-    """Fuzzing engine — Burp Intruder replacement with 4 attack modes."""
     from vapt.engine.intruder import BUILTIN_PAYLOADS, Intruder, IntruderConfig, PayloadGenerator
 
     print_banner()
@@ -2189,7 +2032,6 @@ def cmd_sequencer(
     sample_size: int = typer.Option(200, "--samples", "-s", help="Number of tokens to collect"),
     delay: float = typer.Option(0.1, "--delay", help="Delay between requests"),
 ) -> None:
-    """Token randomness analyzer — Burp Sequencer replacement."""
     from vapt.engine.sequencer import Sequencer
 
     print_banner()
@@ -2238,7 +2080,6 @@ def cmd_codec(
     data: str = typer.Argument(..., help="Data to encode/decode"),
     operation: str = typer.Option("smart", "--op", "-o", help="Operation: b64e|b64d|urle|urld|hexe|hexd|htmle|htmld|jwtd|hashid|smart|md5|sha256"),
 ) -> None:
-    """Encoder, decoder, and hash identification utility."""
     from vapt.utils.codec import Codec
     import json as json_mod
 
@@ -2273,8 +2114,6 @@ def cmd_codec(
         console.print(f"[red]Error: {exc}[/red]")
 
 
-# vapt hunt-auto — AUTONOMOUS BUG BOUNTY HUNTING MODE
-
 @app.command("hunt-auto")
 def cmd_hunt_auto(
     scope: str = typer.Argument(..., help="Path to program scope YAML file (e.g. scopes/doordash.yaml)"),
@@ -2288,31 +2127,6 @@ def cmd_hunt_auto(
     program_age: int = typer.Option(12, "--program-age", help="Program age in months (for duplicate estimation)"),
     resolved: int = typer.Option(0, "--resolved", help="Number of resolved reports (for duplicate estimation)"),
 ) -> None:
-    """
-    Autonomous bug bounty hunting — scope-driven, zero interaction.
-
-    \b
-    Reads a YAML scope file that describes the bug bounty program
-    (targets, rules, exclusions, bounty tiers) and runs the full
-    5-phase pipeline automatically:
-
-    \b
-      Phase 1  UNDERSTAND  — parse scope, plan strategy
-      Phase 2  DISCOVER    — recon, JS mining, endpoints
-      Phase 3  TEST        — vulnerability scanning
-      Phase 4  VALIDATE    — false-positive filtering + dedup
-      Phase 5  REPORT      — PoC generation + bounty reports
-
-    \b
-    Examples:
-      vapt hunt-auto scopes/doordash.yaml
-      vapt hunt-auto scopes/meesho-hackerone.yaml --rate stealth
-      vapt hunt-auto scope.yaml --cookies-a "session=abc" --bearer-a "eyJ..."
-      vapt hunt-auto scope.yaml --proxy http://127.0.0.1:8080
-
-    \b
-    See docs/SCOPE_GUIDE.md for how to write scope YAML files.
-    """
     print_banner(console)
 
     scope_path = Path(scope)
@@ -2346,10 +2160,7 @@ def cmd_hunt_auto(
         raise typer.Exit(130)
 
 
-# Entry point
-
 def entry_point() -> None:
-    """Main entry point registered in setup.py."""
     app()
 
 

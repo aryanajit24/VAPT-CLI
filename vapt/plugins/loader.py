@@ -1,13 +1,10 @@
-"""YAML-based plugin system for custom security checks."""
 
 from __future__ import annotations
 
-import importlib
 import importlib.util
-import os
 import sys
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,11 +14,7 @@ from rich.console import Console
 console = Console()
 
 
-# Base Plugin interface
-
-
 class BasePlugin(ABC):
-    """Abstract base class for all VAPT plugins."""
 
     name: str = "Unnamed Plugin"
     description: str = ""
@@ -36,41 +29,25 @@ class BasePlugin(ABC):
         session: requests.Session,
         config: dict[str, Any] | None = None,
     ) -> list[dict]:
-        """
-        Execute the plugin against a target.
-
-        Args:
-            target: The target URL or host.
-            session: A requests.Session (may include auth, rate limiting, etc.)
-            config: Optional configuration dict.
-
-        Returns:
-            List of finding dicts with keys:
-              vuln_id, title, severity, category, url, evidence, remediation
-        """
         ...
 
     def validate(self) -> bool:
-        """Optional validation hook — return False to skip this plugin."""
         return True
 
-
-# YAML Plugin (declarative checks defined in YAML)
 
 import re
 
 
 @dataclass
 class YAMLCheck:
-    """A single check defined in a YAML plugin."""
     path: str = "/"
     method: str = "GET"
-    match_body: str = ""        # Regex pattern to match in response body
-    match_header: str = ""      # Header name to check
-    match_header_value: str = ""  # Expected header value pattern (regex)
-    match_status: int = 0       # Expected status code (0 = any)
-    not_match_body: str = ""    # Body pattern that should NOT be present
-    not_match_header: str = ""  # Header that should NOT be present
+    match_body: str = ""
+    match_header: str = ""
+    match_header_value: str = ""
+    match_status: int = 0
+    not_match_body: str = ""
+    not_match_header: str = ""
     vuln_id: str = "PLUGIN-001"
     title: str = "Custom Check"
     severity: str = "Medium"
@@ -78,30 +55,6 @@ class YAMLCheck:
 
 
 class YAMLPlugin(BasePlugin):
-    """
-    Plugin defined by a YAML configuration file.
-
-    YAML format:
-    ```yaml
-    name: My Custom Scanner
-    description: Checks for custom vulnerabilities
-    version: 1.0.0
-    author: User
-    checks:
-      - path: /admin
-        match_status: 200
-        vuln_id: CUSTOM-001
-        title: Admin panel accessible
-        severity: High
-        remediation: Restrict admin access
-      - path: /
-        match_header: X-Powered-By
-        vuln_id: CUSTOM-002
-        title: Technology disclosure via X-Powered-By
-        severity: Low
-        remediation: Remove X-Powered-By header
-    ```
-    """
 
     def __init__(self, yaml_data: dict[str, Any]) -> None:
         self.name = yaml_data.get("name", "YAML Plugin")
@@ -137,16 +90,13 @@ class YAMLPlugin(BasePlugin):
 
                 hit = False
 
-                # Status code check
                 if check.match_status and resp.status_code == check.match_status:
                     hit = True
 
-                # Body pattern check
                 if check.match_body:
                     if re.search(check.match_body, resp.text, re.I):
                         hit = True
 
-                # Header check
                 if check.match_header:
                     header_val = resp.headers.get(check.match_header, "")
                     if header_val:
@@ -156,12 +106,10 @@ class YAMLPlugin(BasePlugin):
                         else:
                             hit = True
 
-                # Negative body check (should NOT match)
                 if check.not_match_body:
                     if re.search(check.not_match_body, resp.text, re.I):
                         hit = False
 
-                # Negative header check
                 if check.not_match_header:
                     if resp.headers.get(check.not_match_header):
                         hit = False
@@ -183,18 +131,7 @@ class YAMLPlugin(BasePlugin):
         return findings
 
 
-# Plugin Loader — discovers and loads all plugins
-
-
 class PluginLoader:
-    """
-    Discovers and loads plugins from the plugins directory.
-
-    Searches:
-      1. vapt/plugins/ for .py files containing BasePlugin subclasses
-      2. vapt/plugins/ for .yaml/.yml files with check definitions
-      3. Custom directory specified by user
-    """
 
     def __init__(self, plugin_dirs: list[str | Path] | None = None) -> None:
         base_dir = Path(__file__).parent
@@ -205,7 +142,6 @@ class PluginLoader:
         self.plugins: list[BasePlugin] = []
 
     def discover(self) -> list[BasePlugin]:
-        """Scan all plugin directories and load plugins."""
         self.plugins = []
 
         for plugin_dir in self.plugin_dirs:
@@ -223,7 +159,6 @@ class PluginLoader:
         return self.plugins
 
     def _load_python_plugin(self, path: Path) -> None:
-        """Load a Python plugin file and extract BasePlugin subclasses."""
         try:
             module_name = f"vapt_plugin_{path.stem}"
             spec = importlib.util.spec_from_file_location(module_name, path)
@@ -251,11 +186,9 @@ class PluginLoader:
             console.print(f"  [red]✗[/red] Failed to load plugin {path.name}: {exc}")
 
     def _load_yaml_plugin(self, path: Path) -> None:
-        """Load a YAML plugin file."""
         try:
             import yaml
         except ImportError:
-            # PyYAML not installed — try basic parsing
             console.print(f"  [dim]Skipping YAML plugin {path.name} (PyYAML not installed)[/dim]")
             return
 
@@ -281,7 +214,6 @@ class PluginLoader:
         session: requests.Session,
         config: dict[str, Any] | None = None,
     ) -> list[dict]:
-        """Run all loaded plugins and aggregate findings."""
         all_findings: list[dict] = []
 
         for plugin in self.plugins:

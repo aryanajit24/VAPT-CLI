@@ -1,9 +1,6 @@
-"""Extended knowledge base with detailed vulnerability data."""
 
 from __future__ import annotations
 
-# SEVERITY ASSESSMENT RULES
-# The scanner uses these to determine TRUE severity, not guessed severity.
 
 SEVERITY_RULES = {
     "critical": {
@@ -63,9 +60,6 @@ SEVERITY_RULES = {
 }
 
 
-# FALSE POSITIVE ELIMINATION RULES
-# If a finding matches ANY of these patterns, it needs extra validation.
-
 FALSE_POSITIVE_RULES = {
     "sqli": {
         "must_validate": [
@@ -123,12 +117,7 @@ FALSE_POSITIVE_RULES = {
 }
 
 
-# MASTER VULNERABILITY DATABASE
-# Every vulnerability type the scanner should know about.
-
 MEGA_KB: list[dict] = [
-
-    # WEB APPLICATION VULNERABILITIES (70+)
 
 
     {
@@ -894,7 +883,6 @@ MEGA_KB: list[dict] = [
         "impact": "Request hijacking, cache poisoning, WAF bypass.",
     },
 
-    # API SECURITY VULNERABILITIES (30+)
 
     {
         "vuln_id": "API-001",
@@ -1085,7 +1073,6 @@ MEGA_KB: list[dict] = [
         "impact": "Injection through trusted third-party data.",
     },
 
-    # MOBILE SECURITY — ANDROID (15+)
 
     {
         "vuln_id": "ANDROID-001",
@@ -1277,7 +1264,6 @@ MEGA_KB: list[dict] = [
         "impact": "Database access through content provider SQL injection.",
     },
 
-    # MOBILE SECURITY — iOS (15+)
 
     {
         "vuln_id": "IOS-001",
@@ -1405,7 +1391,6 @@ MEGA_KB: list[dict] = [
         "impact": "Native code execution via WebView bridge exploitation.",
     },
 
-    # DATABASE SECURITY (20+)
 
     {
         "vuln_id": "DB-001",
@@ -1533,7 +1518,6 @@ MEGA_KB: list[dict] = [
         "impact": "Complete database dump with all user data.",
     },
 
-    # INFRASTRUCTURE & CLOUD (25+)
 
     {
         "vuln_id": "INFRA-001",
@@ -1770,7 +1754,6 @@ MEGA_KB: list[dict] = [
         "impact": "Internal architecture disclosure. Performance data leakage.",
     },
 
-    # BUSINESS LOGIC VULNERABILITIES (15+)
 
     {
         "vuln_id": "BIZ-001",
@@ -1864,7 +1847,6 @@ MEGA_KB: list[dict] = [
         "impact": "Manipulation of ratings and public perception.",
     },
 
-    # NETWORK & PROTOCOL (10+)
 
     {
         "vuln_id": "NET-001",
@@ -1914,7 +1896,6 @@ MEGA_KB: list[dict] = [
         "impact": "Subdomain takeover. Phishing. Cookie theft.",
     },
 
-    # MISCELLANEOUS / CROSS-CUTTING
 
     {
         "vuln_id": "MISC-001",
@@ -2023,7 +2004,6 @@ MEGA_KB: list[dict] = [
     },
 ]
 
-# ATTACK METHODOLOGY — How to approach different target types
 
 METHODOLOGY = {
     "web_application": {
@@ -2193,7 +2173,6 @@ METHODOLOGY = {
     },
 }
 
-# REPORT QUALITY RULES — What makes a PERFECT bug bounty report
 
 REPORT_RULES = {
     "required_sections": [
@@ -2229,7 +2208,6 @@ REPORT_RULES = {
 
 
 def get_vuln_by_id(vuln_id: str) -> dict | None:
-    """Look up a vulnerability by its ID."""
     for v in MEGA_KB:
         if v["vuln_id"] == vuln_id:
             return v
@@ -2237,30 +2215,24 @@ def get_vuln_by_id(vuln_id: str) -> dict | None:
 
 
 def get_vulns_by_category(category: str) -> list[dict]:
-    """Get all vulnerabilities in a category."""
     return [v for v in MEGA_KB if v["category"] == category]
 
 
 def get_methodology(target_type: str) -> dict | None:
-    """Get the attack methodology for a target type."""
     return METHODOLOGY.get(target_type)
 
 
 def get_all_categories() -> list[str]:
-    """Get all unique vulnerability categories."""
     return sorted(set(v["category"] for v in MEGA_KB))
 
 
 def get_severity_rules() -> dict:
-    """Get severity assessment rules."""
     return SEVERITY_RULES
 
 
 def get_fp_rules(category: str) -> dict | None:
-    """Get false positive elimination rules for a category."""
     return FALSE_POSITIVE_RULES.get(category)
 
 
 def get_report_rules() -> dict:
-    """Get report quality rules."""
     return REPORT_RULES
