@@ -303,12 +303,12 @@ class EliteReportGenerator:
 
         warnings = []
         if finding.get("duplicate_risk", 0) > 0.7:
-            warnings.append(f"⚠ HIGH DUPLICATE RISK ({finding['duplicate_risk']:.0%}) — Consider strengthening PoC before submission")
+            warnings.append(f"WARNING: HIGH DUPLICATE RISK ({finding['duplicate_risk']:.0%}) -- Consider strengthening PoC before submission")
         if finding.get("poc_completeness", 0) < 0.6:
-            warnings.append(f"⚠ LOW POC COMPLETENESS ({finding['poc_completeness']:.0%}) — Add more evidence/reproduction steps")
+            warnings.append(f"WARNING: LOW POC COMPLETENESS ({finding['poc_completeness']:.0%}) -- Add more evidence/reproduction steps")
         if finding.get("submission_readiness") == "needs_work":
             rec = finding.get("elite_recommendation", "Strengthen PoC and check for duplicates")
-            warnings.append(f"⚠ NEEDS WORK: {rec}")
+            warnings.append(f"WARNING: NEEDS WORK: {rec}")
 
         warning_block = ""
         if warnings:

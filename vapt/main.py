@@ -210,7 +210,6 @@ def _generate_and_display(
     aggregate: dict,
     output_dir: str,
     report_format: str,
-    executive: bool,
     notify: bool,
     auto_open: bool = True,
 ) -> None:
@@ -220,15 +219,6 @@ def _generate_and_display(
 
     generator = ReportGenerator(output_dir=output_dir)
     paths = generator.generate(aggregate, formats=formats)
-
-    if executive:
-        try:
-            from vapt.reporting.html import HTMLReporter
-            exec_path = Path(output_dir) / f"{aggregate['scan_id']}_executive.html"
-            HTMLReporter(template="executive.html").generate(aggregate, str(exec_path))
-            paths["executive_html"] = str(exec_path)
-        except Exception:
-            pass
 
     duration = aggregate.get("duration_seconds", 0)
     risk = aggregate["risk_level"]
@@ -284,13 +274,23 @@ def _generate_and_display(
             console.print(f"  {p_label} [{_risk_color(sev)}]{rec.get('title', '')}[/]")
 
     console.print("\n[bold]Reports generated:[/bold]")
+    html_path = None
     for fmt, path in paths.items():
         console.print(f"  [dim]{fmt:18}[/dim] → {path}")
-        if auto_open and fmt in ("html", "executive_html") and path.endswith(".html"):
-            try:
-                webbrowser.open(f"file://{Path(path).resolve()}")
-            except Exception:
-                pass
+        if fmt == "html" and path.endswith(".html"):
+            html_path = path
+
+    if html_path and auto_open:
+        resolved = str(Path(html_path).resolve())
+        try:
+            webbrowser.open(f"file://{resolved}")
+            console.print(f"\n[bold green]✓ Report opened in browser.[/bold green]")
+        except Exception:
+            console.print(
+                f"\n[bold yellow]⚠ Could not open browser automatically.[/bold yellow]"
+            )
+            console.print(f"  Open this file manually: [bold]{resolved}[/bold]")
+            console.print(f"  Or run: [cyan]vapt report --serve {resolved}[/cyan]")
 
     if notify:
         try:
@@ -388,7 +388,6 @@ def cmd_scan(
         None, "--plugins",
         help="Extra directory to load custom plugins from.",
     ),
-    executive: bool = typer.Option(False, "--executive", help="Also generate executive summary."),
     notify: bool = typer.Option(False, "--notify", help="Send alerts after scan (uses config)."),
     scope_in: Optional[str] = typer.Option(
         None, "--scope-in",
@@ -866,7 +865,6 @@ def cmd_scan(
 
     _generate_and_display(
         aggregate, output_dir, report_format,
-        executive=executive or deep,
         notify=notify,
     )
 
@@ -930,6 +928,89 @@ def _single_module_scan(
 
     aggregate = _build_aggregate(scan_id, normalized, started_at, all_findings)
     _generate_and_display(aggregate, output_dir, report_format, False, False)
+
+
+@app.command("report")
+def cmd_report(
+    path: Optional[str] = typer.Argument(
+        None,
+        help="Path to a specific HTML report file. If omitted, opens the latest report.",
+    ),
+    report_dir: str = typer.Option(
+        "./vapt-reports", "--dir", "-d",
+        help="Directory containing reports.",
+    ),
+    serve: bool = typer.Option(
+        False, "--serve", "-s",
+        help="Serve the report via a local HTTP server instead of file://.",
+    ),
+    port: int = typer.Option(
+        8899, "--port", "-p",
+        help="Port for the local HTTP server (used with --serve).",
+    ),
+) -> None:
+    """Open or serve a scan report in the browser."""
+    import http.server
+    import socketserver
+    import threading
+
+    # Resolve which HTML file to open
+    if path:
+        html_file = Path(path).resolve()
+    else:
+        # Find the latest HTML report in report_dir
+        report_path = Path(report_dir)
+        if not report_path.exists():
+            console.print(f"[red]Report directory not found:[/red] {report_dir}")
+            raise typer.Exit(1)
+        html_files = sorted(report_path.glob("*executive*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not html_files:
+            html_files = sorted(report_path.glob("*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not html_files:
+            console.print(f"[red]No HTML reports found in[/red] {report_dir}")
+            console.print("  Run a scan first: [cyan]vapt scan --target example.com[/cyan]")
+            raise typer.Exit(1)
+        html_file = html_files[0].resolve()
+        console.print(f"[dim]Latest report:[/dim] {html_file}")
+
+    if not html_file.exists():
+        console.print(f"[red]File not found:[/red] {html_file}")
+        raise typer.Exit(1)
+
+    if serve:
+        serve_dir = str(html_file.parent)
+        filename = html_file.name
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=serve_dir, **kwargs)
+            def log_message(self, format, *args):
+                pass  # suppress request logs
+
+        url = f"http://localhost:{port}/{filename}"
+        try:
+            httpd = socketserver.TCPServer(("127.0.0.1", port), QuietHandler)
+        except OSError:
+            console.print(f"[red]Port {port} is already in use.[/red] Try a different port with --port.")
+            raise typer.Exit(1)
+
+        console.print(f"\n[bold green]Serving report at:[/bold green] [link={url}]{url}[/link]")
+        console.print("[dim]Press Ctrl+C to stop.[/dim]\n")
+        webbrowser.open(url)
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            console.print("\n[dim]Server stopped.[/dim]")
+            httpd.shutdown()
+    else:
+        resolved = str(html_file)
+        try:
+            webbrowser.open(f"file://{resolved}")
+            console.print(f"[bold green]✓ Report opened in browser.[/bold green]")
+        except Exception:
+            console.print(f"[bold yellow]⚠ Could not open browser.[/bold yellow]")
+            console.print(f"  Open manually: [bold]{resolved}[/bold]")
+            console.print(f"  Or try: [cyan]vapt report --serve {resolved}[/cyan]")
 
 
 @app.command("recon")
@@ -1340,7 +1421,7 @@ def cmd_hunt(
             all_findings = enrich_all_findings(all_findings)
 
         aggregate = _build_aggregate(scan_id, app_path, started_at, all_findings)
-        _generate_and_display(aggregate, output_dir, "html", executive=True, notify=False)
+        _generate_and_display(aggregate, output_dir, "html", notify=False)
 
         try:
             bounty_gen = BountyReportGenerator(output_dir=output_dir)
@@ -1386,7 +1467,6 @@ def cmd_hunt(
             "validate_findings": validate,
             "cloud": hunt_type in ("3", "4"),
             "plugins_dir": None,
-            "executive": True,
             "notify": False,
             "scope_in": scope_in_str,
             "scope_out": scope_out_str,
@@ -1723,12 +1803,13 @@ def cmd_authflow(
         console.print(f"  [{_risk_color(sev)}]{sev.upper()}[/] {f.get('title', '')}")
 
 
-@app.command("report")
-def cmd_report(
+@app.command("regenerate")
+def cmd_regenerate(
     report_format: str = typer.Option("html", "--format", "-f", help="pdf|html|json"),
     scan_file: Optional[str] = typer.Option(None, "--scan-file", "-s"),
     output_dir: str = typer.Option("./vapt-reports", "--output", "-o"),
 ) -> None:
+    """Re-generate a report from a previous scan JSON file."""
     print_banner(console)
     if not scan_file:
         console.print("[yellow]Provide --scan-file <path> to a previous scan JSON.[/yellow]")
@@ -1752,10 +1833,14 @@ def cmd_report(
     for fmt, path in paths.items():
         console.print(f"  {fmt} → {path}")
         if fmt in ("html",) and path.endswith(".html"):
+            resolved = str(Path(path).resolve())
             try:
-                webbrowser.open(f"file://{Path(path).resolve()}")
+                webbrowser.open(f"file://{resolved}")
+                console.print(f"[bold green]✓ Report opened in browser.[/bold green]")
             except Exception:
-                pass
+                console.print(f"[bold yellow]⚠ Could not open browser.[/bold yellow]")
+                console.print(f"  Open manually: [bold]{resolved}[/bold]")
+                console.print(f"  Or try: [cyan]vapt report --serve {resolved}[/cyan]")
 
 
 @app.command("monitor")

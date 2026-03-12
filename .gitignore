@@ -33,6 +33,13 @@ ENV/
 htmlcov/
 *.cover
 
+# Scan output / reports (generated at runtime)
+vapt-reports/
+airbnb-hunt-output/
+
+# OS files
+.DS_Store
+
 # IDE
 .idea/
 .vscode/

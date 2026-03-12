@@ -107,12 +107,11 @@ class TestHTMLReporter:
         content = Path(path).read_text(encoding="utf-8")
         assert "WEB-002" in content
 
-    def test_executive_template(self, tmp_path):
-        path = str(tmp_path / "executive.html")
-        HTMLReporter(template="executive.html").generate(SAMPLE_SCAN, path)
-        assert Path(path).exists()
+    def test_recommendations_in_report(self, tmp_path):
+        path = str(tmp_path / "report.html")
+        HTMLReporter().generate(SAMPLE_SCAN, path)
         content = Path(path).read_text(encoding="utf-8")
-        assert "Executive" in content
+        assert "Recommendations" in content
 
 
 class TestReportGenerator:

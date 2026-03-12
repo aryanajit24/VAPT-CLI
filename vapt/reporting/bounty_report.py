@@ -166,7 +166,7 @@ class BountyReportGenerator:
             sev = f.get("severity", "Info")
             counts[sev] = counts.get(sev, 0) + 1
 
-        report = f"""# 🛡️ Bug Bounty Security Report
+        report = f"""# Bug Bounty Security Report
 
 **Scan Date:** {timestamp}  
 **Scanner:** VAPT CLI  
@@ -188,7 +188,7 @@ class BountyReportGenerator:
         critical_high = counts.get("Critical", 0) + counts.get("High", 0)
 
         report += f"""
-**Risk Assessment:** {'🔴 CRITICAL' if counts.get('Critical', 0) > 0 else '🟡 MODERATE' if counts.get('High', 0) > 0 else '🟢 LOW'}  
+**Risk Assessment:** {'CRITICAL' if counts.get('Critical', 0) > 0 else 'MODERATE' if counts.get('High', 0) > 0 else 'LOW'}  
 **Total Critical+High:** {critical_high}  
 **Confidence Level:** HIGH (all findings validated)
 
@@ -261,9 +261,9 @@ class BountyReportGenerator:
 
         impact = finding.get("impact", "") or self._get_impact(category, severity)
 
-        sev_emoji = {"Critical": "🔴", "High": "🟠", "Medium": "🟡", "Low": "🟢", "Info": "🔵"}.get(severity, "⚪")
+        sev_tag = {"Critical": "[CRITICAL]", "High": "[HIGH]", "Medium": "[MEDIUM]", "Low": "[LOW]", "Info": "[INFO]"}.get(severity, "[--]")
 
-        report = f"""### {sev_emoji} Finding #{index}: {title}
+        report = f"""### {sev_tag} Finding #{index}: {title}
 
 | Field | Value |
 |-------|-------|

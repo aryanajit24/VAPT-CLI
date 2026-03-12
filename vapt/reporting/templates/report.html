@@ -3,357 +3,762 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VAPT CLI — Bug Bounty Report: {{ target }}</title>
+    <title>Security Report — {{ target }}</title>
     <style>
         :root {
-            --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
-            --border: #30363d; --text: #e6edf3; --dim: #8b949e;
-            --blue: #58a6ff; --green: #3fb950; --yellow: #d29922;
-            --orange: #f0883e; --red: #f85149; --purple: #bc8cff;
+            --bg: #111118;
+            --bg-raised: #18181f;
+            --bg-inset: #0c0c12;
+            --border: #2a2a35;
+            --border-subtle: #1f1f2a;
+            --fg: #e1e1e8;
+            --fg-dim: #8888a0;
+            --fg-faint: #55556a;
+            --accent: #6c8aff;
+            --accent-dim: #4a5eb5;
+            --red: #e5534b;
+            --red-dim: #a03030;
+            --orange: #d18a3e;
+            --orange-dim: #8a5a20;
+            --yellow: #c9a836;
+            --yellow-dim: #7a6a18;
+            --green: #4caf6a;
+            --green-dim: #2a7040;
+            --purple: #a078d0;
+            --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+            --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+            --radius: 4px;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', -apple-system, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-
-        header { background: linear-gradient(135deg, #1f6feb 0%, #0d419d 100%); padding: 2rem 2.5rem; border-radius: 12px; margin-bottom: 2rem; position: relative; overflow: hidden; }
-        header::after { content: ''; position: absolute; top: -50%; right: -20%; width: 50%; height: 200%; background: rgba(255,255,255,0.03); transform: rotate(15deg); }
-        header h1 { font-size: 2rem; letter-spacing: 2px; margin-bottom: 0.5rem; }
-        header .meta { display: flex; gap: 2rem; flex-wrap: wrap; opacity: 0.9; font-size: 0.95rem; }
-        header .meta span { display: flex; align-items: center; gap: 0.3rem; }
-
-        .risk-badge { display: inline-flex; align-items: center; padding: 0.4rem 1.2rem; border-radius: 20px; font-weight: bold; font-size: 1rem; text-transform: uppercase; }
-        .risk-critical { background: var(--red); color: #fff; }
-        .risk-high { background: var(--orange); color: #000; }
-        .risk-medium { background: var(--yellow); color: #000; }
-        .risk-low { background: var(--green); color: #000; }
-        .risk-info { background: var(--blue); color: #000; }
-
-        .score-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; margin-bottom: 2rem; }
-        .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.2rem; margin-top: 1rem; }
-        .score-card { background: var(--bg3); border-radius: 8px; padding: 1.2rem; text-align: center; }
-        .score-card .number { font-size: 2.5rem; font-weight: bold; }
-        .score-card .label { color: var(--dim); font-size: 0.85rem; margin-top: 0.3rem; }
-
-        .section { margin-bottom: 2.5rem; }
-        h2 { color: var(--blue); border-bottom: 2px solid var(--bg3); padding-bottom: 0.5rem; margin-bottom: 1.5rem; font-size: 1.4rem; }
-
-        .finding-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1.5rem; overflow: hidden; transition: border-color 0.2s; }
-        .finding-card:hover { border-color: var(--blue); }
-        .finding-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; }
-        .finding-header .title { font-weight: 600; font-size: 1.05rem; }
-        .finding-header .badges { display: flex; gap: 0.5rem; align-items: center; }
-        .sev-badge { padding: 0.2rem 0.8rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
-        .sev-critical { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid var(--red); }
-        .sev-high { background: rgba(240,136,62,0.15); color: var(--orange); border: 1px solid var(--orange); }
-        .sev-medium { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid var(--yellow); }
-        .sev-low { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid var(--green); }
-        .sev-info { background: rgba(88,166,255,0.15); color: var(--blue); border: 1px solid var(--blue); }
-
-        .finding-body { padding: 0 1.5rem 1.5rem; }
-        .finding-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-        .finding-field { background: var(--bg); border-radius: 6px; padding: 0.8rem 1rem; }
-        .finding-field .field-label { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem; }
-        .finding-field .field-value { font-size: 0.95rem; word-break: break-all; }
-
-        .evidence-block { background: var(--bg); border-left: 3px solid var(--blue); border-radius: 4px; padding: 1rem 1.2rem; margin: 0.8rem 0; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.85rem; white-space: pre-wrap; overflow-x: auto; max-height: 400px; overflow-y: auto; }
-        .poc-block { background: var(--bg); border-left: 3px solid var(--red); border-radius: 4px; padding: 1rem 1.2rem; margin: 0.8rem 0; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.85rem; white-space: pre-wrap; overflow-x: auto; max-height: 400px; overflow-y: auto; }
-        .remediation-block { background: rgba(63,185,80,0.05); border-left: 3px solid var(--green); border-radius: 4px; padding: 1rem 1.2rem; margin: 0.8rem 0; }
-
-        .confidence-bar { display: inline-flex; align-items: center; gap: 0.4rem; }
-        .confidence-track { width: 60px; height: 6px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
-        .confidence-fill { height: 6px; border-radius: 3px; background: var(--green); }
-
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        th { background: var(--bg3); color: var(--dim); text-align: left; padding: 0.7rem 1rem; border-bottom: 2px solid var(--border); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
-        td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--bg3); vertical-align: top; }
-        tr:hover td { background: var(--bg2); }
-
-        .tag { display: inline-block; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.6rem; margin: 0.1rem; font-size: 0.8rem; }
-        .chain-block { background: rgba(218,54,51,0.05); border-left: 4px solid var(--red); padding: 1rem 1.2rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem; }
-        .footer { text-align: center; color: var(--dim); margin-top: 3rem; padding: 1.5rem; border-top: 1px solid var(--bg3); font-size: 0.9rem; }
-
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+        }
+        header {
+            position: sticky; top: 0; z-index: 50;
+            background: var(--bg-raised);
+            border-bottom: 1px solid var(--border);
+        }
+        .header-inner {
+            max-width: 1100px; margin: 0 auto;
+            padding: 14px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .brand {
+            font-size: 13px; font-weight: 700;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--accent);
+        }
+        .header-nav { display: flex; gap: 6px; }
+        .header-nav a {
+            color: var(--fg-dim); text-decoration: none;
+            font-size: 12px; font-weight: 500;
+            padding: 5px 10px; border-radius: var(--radius);
+            transition: color 0.15s, background 0.15s;
+        }
+        .header-nav a:hover { color: var(--fg); background: var(--border-subtle); }
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px 28px; }
+        .hero { margin-bottom: 36px; }
+        .hero h1 {
+            font-size: 26px; font-weight: 700;
+            color: var(--fg); letter-spacing: -0.3px;
+            margin-bottom: 8px;
+        }
+        .hero-meta {
+            display: flex; align-items: center; gap: 16px;
+            font-size: 12px; color: var(--fg-faint);
+        }
+        .hero-meta span { display: flex; align-items: center; gap: 4px; }
+        .risk-pill {
+            display: inline-block;
+            padding: 3px 12px; border-radius: 20px;
+            font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.6px;
+        }
+        .risk-critical { background: var(--red-dim); color: #fbb; }
+        .risk-high { background: var(--orange-dim); color: #fda; }
+        .risk-medium { background: var(--yellow-dim); color: #fea; }
+        .risk-low { background: var(--green-dim); color: #beb; }
+        .risk-info { background: var(--border); color: var(--fg-dim); }
+        .grid { display: grid; grid-template-columns: 1fr 280px; gap: 32px; }
+        .main { min-width: 0; }
+        .aside { min-width: 0; }
+        .score-box {
+            text-align: center;
+            padding: 24px 16px 20px;
+        }
+        .score-ring { position: relative; width: 100px; height: 100px; margin: 0 auto 12px; }
+        .score-ring svg { transform: rotate(-90deg); }
+        .ring-bg { fill: none; stroke: var(--border); stroke-width: 7; }
+        .ring-fg { fill: none; stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
+        .score-value {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+        .score-value .num { font-size: 28px; font-weight: 800; line-height: 1; }
+        .score-value .of { font-size: 10px; color: var(--fg-faint); margin-top: 2px; }
+        .stat-row {
+            display: grid; grid-template-columns: repeat(5, 1fr);
+            gap: 6px; margin-bottom: 28px;
+        }
+        .stat {
+            text-align: center; padding: 14px 6px;
+            background: var(--bg-raised);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+        .stat .n { font-size: 24px; font-weight: 700; line-height: 1; }
+        .stat .l {
+            font-size: 10px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--fg-faint); margin-top: 4px;
+        }
+        .stitle {
+            font-size: 16px; font-weight: 700;
+            color: var(--fg); margin-bottom: 14px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .stitle .cnt {
+            font-size: 11px; font-weight: 600; color: var(--fg-dim);
+            background: var(--border); padding: 1px 7px; border-radius: 8px;
+            margin-left: 8px; vertical-align: 1px;
+        }
+        .findex { margin-bottom: 32px; }
+        .findex-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--border-subtle);
+            text-decoration: none; color: var(--fg);
+            transition: background 0.1s;
+        }
+        .findex-row:first-child { border-top: 1px solid var(--border-subtle); }
+        .findex-row:hover { background: var(--bg-raised); }
+        .findex-row .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            margin-top: 6px; flex-shrink: 0;
+        }
+        .findex-row .dot.critical, .findex-row .dot.high { background: var(--red); }
+        .findex-row .dot.medium { background: var(--yellow); }
+        .findex-row .dot.low { background: var(--green); }
+        .findex-row .dot.info { background: var(--fg-faint); }
+        .findex-info { flex: 1; min-width: 0; }
+        .findex-info .t { font-size: 13px; font-weight: 600; }
+        .findex-info .m { font-size: 11px; color: var(--fg-faint); margin-top: 1px; }
+        .finding {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            background: var(--bg-raised);
+        }
+        .finding-head {
+            padding: 16px 20px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .finding-head h3 {
+            font-size: 17px; font-weight: 700; margin-bottom: 6px;
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .finding-head .idx { color: var(--fg-faint); font-weight: 400; font-size: 14px; }
+        .finding-meta {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 12px; color: var(--fg-dim); flex-wrap: wrap;
+        }
+        .finding-meta .sep { color: var(--fg-faint); }
+        .props {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            border-bottom: 1px solid var(--border);
+        }
+        .prop {
+            padding: 8px 14px;
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .prop:nth-child(3n) { border-right: none; }
+        .prop .pk { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--fg-faint); margin-bottom: 1px; }
+        .prop .pv { font-size: 12px; color: var(--fg); word-break: break-all; }
+        .prop.full { grid-column: 1 / -1; border-right: none; }
+        .fbody { padding: 16px 20px; }
+        .fbody h4 {
+            font-size: 13px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.4px;
+            color: var(--fg-dim); margin: 18px 0 8px;
+        }
+        .fbody h4:first-child { margin-top: 0; }
+        .fbody p { font-size: 14px; line-height: 1.7; color: var(--fg); margin-bottom: 10px; }
+        .steps {
+            list-style: none; padding: 0; margin: 6px 0 12px;
+            counter-reset: s;
+        }
+        .steps li {
+            counter-increment: s; position: relative;
+            padding: 8px 10px 8px 38px; margin-bottom: 4px;
+            background: var(--bg-inset);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            font-size: 13px; line-height: 1.6;
+        }
+        .steps li::before {
+            content: counter(s);
+            position: absolute; left: 8px; top: 8px;
+            width: 22px; height: 22px; line-height: 22px;
+            text-align: center; border-radius: 50%;
+            background: var(--accent-dim); color: #fff;
+            font-size: 11px; font-weight: 700;
+        }
+        .codeblock {
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin: 6px 0 14px; overflow: hidden;
+        }
+        .codeblock-label {
+            padding: 5px 14px;
+            background: var(--bg-raised);
+            border-bottom: 1px solid var(--border);
+            font-size: 11px; font-weight: 600; color: var(--fg-faint);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .codeblock-label .cdot { width: 8px; height: 8px; border-radius: 50%; }
+        .cdot-req { background: var(--accent); }
+        .cdot-res { background: var(--green); }
+        .cdot-evidence { background: var(--yellow); }
+        .cdot-payload { background: var(--orange); }
+        .cdot-poc { background: var(--purple); }
+        .cdot-fix { background: var(--green); }
+        .codeblock pre {
+            margin: 0; padding: 14px;
+            font-family: var(--mono);
+            font-size: 12px; line-height: 1.5;
+            overflow-x: auto; white-space: pre-wrap;
+            word-break: break-word; color: var(--fg);
+        }
+        .note {
+            border-left: 3px solid var(--yellow);
+            background: rgba(201,168,54,0.06);
+            padding: 10px 14px; margin: 6px 0 14px;
+            font-size: 13px; line-height: 1.6;
+        }
+        .note strong { color: var(--yellow); }
+        .remedy {
+            border-left: 3px solid var(--green);
+            background: rgba(76,175,106,0.05);
+            padding: 10px 14px; margin: 6px 0 14px;
+            font-size: 13px; line-height: 1.7; white-space: pre-wrap;
+        }
+        .tags { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0; }
+        .tag {
+            display: inline-block; padding: 2px 8px; border-radius: 3px;
+            font-size: 11px; font-weight: 500;
+            border: 1px solid var(--border); color: var(--fg-dim); background: var(--bg);
+        }
+        .tag-owasp { border-color: var(--red); color: var(--red); }
+        .tag-cwe { border-color: var(--yellow); color: var(--yellow); }
+        .tag-comp { border-color: var(--purple); color: var(--purple); }
+        details { margin-bottom: 4px; }
+        details summary {
+            cursor: pointer; padding: 6px 10px;
+            font-size: 12px; font-weight: 600;
+            color: var(--fg-dim); border-radius: var(--radius);
+            transition: background 0.1s; list-style: none;
+            display: flex; align-items: center; gap: 5px;
+        }
+        details summary::-webkit-details-marker { display: none; }
+        details summary::before {
+            content: '\25B8'; font-size: 10px;
+            transition: transform 0.15s; display: inline-block;
+        }
+        details[open] summary::before { transform: rotate(90deg); }
+        details summary:hover { background: var(--border-subtle); }
+        .widget {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-raised);
+            margin-bottom: 16px; overflow: hidden;
+        }
+        .widget-title {
+            padding: 8px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--fg-dim);
+        }
+        .widget-body { padding: 10px 14px; }
+        .wlist { list-style: none; padding: 0; }
+        .wlist li {
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .wlist li:last-child { border-bottom: none; }
+        .wlist .k { color: var(--fg-faint); }
+        .wlist .v { color: var(--fg); font-weight: 500; }
+        .chain {
+            border: 1px solid var(--red-dim);
+            border-left: 3px solid var(--red);
+            border-radius: var(--radius);
+            background: rgba(229,83,75,0.04);
+            padding: 12px 14px; margin-bottom: 8px;
+        }
+        .chain h4 { font-size: 13px; font-weight: 600; color: var(--red); margin-bottom: 4px; text-transform: none; letter-spacing: 0; }
+        .chain .ctags { display: flex; gap: 4px; flex-wrap: wrap; }
+        .chain .ctag {
+            background: rgba(229,83,75,0.1); color: var(--red);
+            padding: 1px 7px; border-radius: 3px;
+            font-size: 10px; font-weight: 600;
+        }
+        .rec {
+            border-left: 3px solid var(--green);
+            background: var(--bg-raised);
+            border-radius: var(--radius);
+            padding: 10px 14px; margin-bottom: 6px;
+        }
+        .rec strong { font-size: 13px; color: var(--green); }
+        .rec p { font-size: 12px; color: var(--fg-dim); margin-top: 2px; }
+        .comp-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 6px;
+        }
+        .comp-card {
+            background: var(--bg-raised);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 10px 12px; text-align: center;
+        }
+        .comp-card .fw { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+        .comp-card .st { font-size: 11px; color: var(--fg-faint); }
+        footer {
+            max-width: 1100px; margin: 24px auto 0;
+            padding: 20px 28px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            font-size: 11px; color: var(--fg-faint);
+        }
+        @media (max-width: 860px) {
+            .grid { grid-template-columns: 1fr; }
+            .aside { order: -1; }
+            .stat-row { grid-template-columns: repeat(3, 1fr); }
+            .props { grid-template-columns: 1fr 1fr; }
+            .prop:nth-child(3n) { border-right: 1px solid var(--border); }
+            .prop:nth-child(2n) { border-right: none; }
+        }
+        @media (max-width: 540px) {
+            .stat-row { grid-template-columns: repeat(2, 1fr); }
+            .props { grid-template-columns: 1fr; }
+            .prop { border-right: none !important; }
+            .header-nav { display: none; }
+            .container { padding: 20px 16px; }
+        }
         @media print {
-            body { background: #fff; color: #000; }
-            .container { max-width: none; }
-            header { background: #1f6feb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .finding-card { break-inside: avoid; }
-            .evidence-block, .poc-block { max-height: none; }
+            body { background: #fff; color: #222; }
+            header { display: none; }
+            .grid { grid-template-columns: 1fr; }
+            .finding { break-inside: avoid; }
         }
+        [id] { scroll-margin-top: 56px; }
     </style>
 </head>
 <body>
+
+<header>
+    <div class="header-inner">
+        <span class="brand">VAPT CLI</span>
+        <nav class="header-nav">
+            <a href="#overview">Overview</a>
+            <a href="#findings">Findings</a>
+            {% if attack_chains %}<a href="#chains">Chains</a>{% endif %}
+            {% if compliance %}<a href="#compliance">Compliance</a>{% endif %}
+            <a href="#recommendations">Fixes</a>
+        </nav>
+    </div>
+</header>
+
 <div class="container">
-    <header>
-        <h1>&#x1F6E1; VAPT CLI — Bug Bounty Report</h1>
-        <div class="meta">
-            <span>&#x1F3AF; <strong>{{ target }}</strong></span>
-            <span>&#x1F4C5; {{ generated_at }}</span>
-            <span>&#x1F50D; {{ findings | length }} findings</span>
-            <span>&#x2705; Professional Scanner</span>
-        </div>
-    </header>
 
-    <!-- Risk Score -->
-    <div class="section score-box">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <h2 style="margin-top:0; border:none; padding:0;">Risk Assessment</h2>
-                <span class="risk-badge risk-{{ risk_level }}">{{ risk_level }}</span>
-            </div>
-            <div style="text-align: right;">
-                <div class="score-card" style="background: transparent;">
-                    <div class="number" style="color: {% if risk_level == 'critical' %}var(--red){% elif risk_level == 'high' %}var(--orange){% elif risk_level == 'medium' %}var(--yellow){% else %}var(--green){% endif %}">
-                        {{ overall_score }}<small style="font-size: 1rem">/100</small>
+    <div class="hero" id="top">
+        <h1>{{ target }}</h1>
+        <div class="hero-meta">
+            <span>{{ generated_at }}</span>
+            <span>{{ findings | length }} findings</span>
+            <span>Score {{ overall_score }}/100</span>
+            <span class="risk-pill risk-{{ risk_level | default('info') | lower }}">{{ risk_level | default('info') | upper }}</span>
+        </div>
+    </div>
+
+    {% set critical = findings | selectattr('severity', 'equalto', 'critical') | list | length %}
+    {% set high = findings | selectattr('severity', 'equalto', 'high') | list | length %}
+    {% set medium = findings | selectattr('severity', 'equalto', 'medium') | list | length %}
+    {% set low = findings | selectattr('severity', 'equalto', 'low') | list | length %}
+    {% set info = findings | selectattr('severity', 'equalto', 'info') | list | length %}
+
+    <div class="grid">
+        <div class="main">
+
+            <section id="overview">
+                <div class="stat-row">
+                    <div class="stat"><div class="n" style="color:var(--red)">{{ critical }}</div><div class="l">Critical</div></div>
+                    <div class="stat"><div class="n" style="color:var(--orange)">{{ high }}</div><div class="l">High</div></div>
+                    <div class="stat"><div class="n" style="color:var(--yellow)">{{ medium }}</div><div class="l">Medium</div></div>
+                    <div class="stat"><div class="n" style="color:var(--green)">{{ low }}</div><div class="l">Low</div></div>
+                    <div class="stat"><div class="n" style="color:var(--fg-faint)">{{ info }}</div><div class="l">Info</div></div>
+                </div>
+            </section>
+
+            <section id="summary" class="findex">
+                <h2 class="stitle">Findings <span class="cnt">{{ findings | length }}</span></h2>
+                {% for f in findings %}
+                <a class="findex-row" href="#f-{{ loop.index }}">
+                    <span class="dot {{ f.severity | default('info') | lower }}"></span>
+                    <div class="findex-info">
+                        <div class="t">{{ f.title | default('Unknown Finding') }}</div>
+                        <div class="m">{{ f.vuln_id | default('') }} &middot; {{ f.scanner | default('scanner') }} &middot; CVSS {{ f.cvss_score | default('--') }}</div>
                     </div>
-                    <div class="label">Risk Score</div>
-                </div>
-            </div>
-        </div>
-        <div class="score-grid">
-            <div class="score-card">
-                <div class="number" style="color: var(--red);">{{ findings | selectattr('severity', 'equalto', 'Critical') | list | length }}</div>
-                <div class="label">Critical</div>
-            </div>
-            <div class="score-card">
-                <div class="number" style="color: var(--orange);">{{ findings | selectattr('severity', 'equalto', 'High') | list | length }}</div>
-                <div class="label">High</div>
-            </div>
-            <div class="score-card">
-                <div class="number" style="color: var(--yellow);">{{ findings | selectattr('severity', 'equalto', 'Medium') | list | length }}</div>
-                <div class="label">Medium</div>
-            </div>
-            <div class="score-card">
-                <div class="number" style="color: var(--green);">{{ findings | selectattr('severity', 'equalto', 'Low') | list | length }}</div>
-                <div class="label">Low</div>
-            </div>
-            <div class="score-card">
-                <div class="number" style="color: var(--blue);">{{ findings | selectattr('severity', 'equalto', 'Info') | list | length }}</div>
-                <div class="label">Info</div>
-            </div>
-        </div>
-    </div>
+                    <span class="risk-pill risk-{{ f.severity | default('info') | lower }}" style="font-size:10px;padding:1px 8px;">{{ f.severity | default('info') | upper }}</span>
+                </a>
+                {% endfor %}
+            </section>
 
-    <!-- Findings Summary Table -->
-    {% if findings %}
-    <div class="section">
-        <h2>📊 Findings Summary</h2>
-        <table>
-            <thead>
-                <tr><th>#</th><th>Severity</th><th>CVSS</th><th>CWE</th><th>Title</th><th>URL</th></tr>
-            </thead>
-            <tbody>
-            {% for f in findings %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td><span class="sev-badge sev-{{ f.severity | default('info') | lower }}" style="font-size: 0.7rem; padding: 0.1rem 0.5rem;">{{ f.severity | default('Info') | upper }}</span></td>
-                    <td>{{ f.cvss_score | default('-') }}</td>
-                    <td style="font-family: monospace; font-size: 0.85rem;">{{ f.cwe | default('-') }}</td>
-                    <td><a href="#finding-{{ loop.index }}" style="color: var(--blue); text-decoration: none;">{{ f.title | default('N/A') }}</a></td>
-                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem;">{{ f.url | default(target) }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
+            <section id="findings" style="margin-top: 8px;">
+                <h2 class="stitle">Vulnerability Details</h2>
 
-    <!-- Detailed Findings -->
-    <div class="section">
-        <h2>&#x1F50D; Vulnerability Findings ({{ findings | length }})</h2>
-        {% if findings %}
-        {% for f in findings %}
-        <div class="finding-card" id="finding-{{ loop.index }}">
-            <div class="finding-header">
-                <div>
-                    <span style="color: var(--dim); font-size: 0.85rem;">#{{ loop.index }} — {{ f.vuln_id | default('N/A') }}</span>
-                    <div class="title">{{ f.title | default('Unnamed Vulnerability') }}</div>
-                </div>
-                <div class="badges">
-                    {% if f.confidence is defined and f.confidence %}
-                    <div class="confidence-bar">
-                        <span style="font-size: 0.75rem; color: var(--dim);">{{ (f.confidence * 100) | int }}%</span>
-                        <div class="confidence-track">
-                            <div class="confidence-fill" style="width: {{ (f.confidence * 100) | int }}%;{% if f.confidence < 0.5 %} background: var(--red);{% elif f.confidence < 0.8 %} background: var(--yellow);{% endif %}"></div>
+                {% for f in findings %}
+                <div class="finding" id="f-{{ loop.index }}">
+
+                    <div class="finding-head">
+                        <h3>
+                            <span class="risk-pill risk-{{ f.severity | default('info') | lower }}">{{ f.severity | default('info') | upper }}</span>
+                            {{ f.title | default('Unknown Finding') }}
+                            <span class="idx">#{{ loop.index }}</span>
+                        </h3>
+                        <div class="finding-meta">
+                            <span>{{ f.scanner | default('scanner') }}</span>
+                            {% if f.confidence %}
+                            <span class="sep">/</span>
+                            <span>{{ (f.confidence * 100) | int }}% confidence</span>
+                            {% endif %}
+                            {% if f.validated %}
+                            <span class="sep">/</span>
+                            <span style="color:var(--green)">Validated</span>
+                            {% endif %}
                         </div>
                     </div>
-                    {% endif %}
-                    <span class="sev-badge sev-{{ f.severity | default('info') | lower }}">
-                        {{ f.severity | default('info') | upper }}
-                    </span>
-                    {% if f.cvss_score is defined and f.cvss_score %}
-                    <span class="tag">CVSS {{ f.cvss_score }}</span>
-                    {% endif %}
-                    {% if f.cwe is defined and f.cwe %}
-                    <span class="tag" style="border-color: var(--purple); color: var(--purple);">{{ f.cwe }}</span>
-                    {% endif %}
-                </div>
-            </div>
 
-            <div class="finding-body">
-                {% if f.description is defined and f.description %}
-                <div style="margin-bottom: 1rem; padding: 0.8rem 1rem; background: var(--bg); border-radius: 6px; line-height: 1.7;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📖 Description</div>
-                    {{ f.description }}
-                </div>
-                {% endif %}
+                    <div class="props">
+                        <div class="prop"><div class="pk">Vuln ID</div><div class="pv">{{ f.vuln_id | default('--') }}</div></div>
+                        <div class="prop"><div class="pk">CVSS</div><div class="pv">{{ f.cvss_score | default('--') }}{% if f.cvss_vector %} <span style="font-size:10px;color:var(--fg-faint)">{{ f.cvss_vector }}</span>{% endif %}</div></div>
+                        <div class="prop"><div class="pk">Category</div><div class="pv">{{ f.category | default('--') }}</div></div>
+                        <div class="prop"><div class="pk">CWE</div><div class="pv">{{ f.cwe | default('--') }}</div></div>
+                        <div class="prop"><div class="pk">OWASP</div><div class="pv">{{ f.owasp_category | default('--') }}</div></div>
+                        <div class="prop"><div class="pk">Risk Score</div><div class="pv">{{ f.risk_score | default('--') }}</div></div>
+                        {% if f.url %}
+                        <div class="prop full"><div class="pk">Endpoint</div><div class="pv">{{ f.url }}</div></div>
+                        {% endif %}
+                        {% if f.parameter %}
+                        <div class="prop full"><div class="pk">Parameter</div><div class="pv">{{ f.parameter }}</div></div>
+                        {% endif %}
+                    </div>
 
-                <div class="finding-grid">
-                    <div class="finding-field">
-                        <div class="field-label">URL</div>
-                        <div class="field-value">{{ f.url | default(target) }}</div>
-                    </div>
-                    <div class="finding-field">
-                        <div class="field-label">Category</div>
-                        <div class="field-value">{{ f.category | default('N/A') }}</div>
-                    </div>
-                    {% if f.parameter is defined and f.parameter %}
-                    <div class="finding-field">
-                        <div class="field-label">Parameter</div>
-                        <div class="field-value">{{ f.parameter }}</div>
-                    </div>
-                    {% endif %}
-                    {% if f.scanner is defined and f.scanner %}
-                    <div class="finding-field">
-                        <div class="field-label">Scanner Module</div>
-                        <div class="field-value">{{ f.scanner }}</div>
-                    </div>
-                    {% endif %}
-                    {% if f.cvss_vector is defined and f.cvss_vector %}
-                    <div class="finding-field" style="grid-column: 1 / -1;">
-                        <div class="field-label">CVSS Vector</div>
-                        <div class="field-value" style="font-family: monospace; font-size: 0.85rem;">{{ f.cvss_vector }}</div>
-                    </div>
-                    {% endif %}
-                </div>
+                    <div class="fbody">
 
-                {% if f.impact is defined and f.impact %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">💥 Business Impact</div>
-                    <div style="background: rgba(248,81,73,0.06); border-left: 3px solid var(--red); border-radius: 4px; padding: 0.8rem 1.2rem; line-height: 1.7;">{{ f.impact }}</div>
-                </div>
-                {% endif %}
+                        {% if f.description %}
+                        <h4>Description</h4>
+                        <p>{{ f.description }}</p>
+                        {% endif %}
 
-                {% if f.steps_to_reproduce is defined and f.steps_to_reproduce %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">🔢 Steps to Reproduce</div>
-                    <div style="background: var(--bg); border-left: 3px solid var(--yellow); border-radius: 4px; padding: 1rem 1.2rem;">
-                        <ol style="margin: 0; padding-left: 1.5rem; line-height: 2;">
-                        {% for step in f.steps_to_reproduce %}
-                            <li style="margin-bottom: 0.3rem;">{{ step }}</li>
-                        {% endfor %}
+                        {% if f.how_it_works %}
+                        <h4>How It Works</h4>
+                        <p>{{ f.how_it_works }}</p>
+                        {% endif %}
+
+                        {% if f.impact %}
+                        <h4>Impact</h4>
+                        <p>{{ f.impact }}</p>
+                        {% endif %}
+
+                        {% if f.business_impact %}
+                        <div class="note"><strong>Business Impact:</strong> {{ f.business_impact }}</div>
+                        {% endif %}
+
+                        {% if f.steps_to_reproduce %}
+                        <h4>Steps to Reproduce</h4>
+                        <ol class="steps">
+                            {% for step in f.steps_to_reproduce %}
+                            <li>{{ step }}</li>
+                            {% endfor %}
                         </ol>
+                        {% endif %}
+
+                        {% if f.evidence %}
+                        <h4>Evidence</h4>
+                        <div class="codeblock">
+                            <div class="codeblock-label"><span class="cdot cdot-evidence"></span> Evidence</div>
+                            <pre>{{ f.evidence }}</pre>
+                        </div>
+                        {% endif %}
+
+                        {% if f.request %}
+                        <h4>HTTP Request</h4>
+                        <div class="codeblock">
+                            <div class="codeblock-label"><span class="cdot cdot-req"></span> Request</div>
+                            <pre>{{ f.request }}</pre>
+                        </div>
+                        {% endif %}
+
+                        {% if f.response %}
+                        <h4>HTTP Response</h4>
+                        <div class="codeblock">
+                            <div class="codeblock-label"><span class="cdot cdot-res"></span> Response</div>
+                            <pre>{{ f.response }}</pre>
+                        </div>
+                        {% endif %}
+
+                        {% if f.payload %}
+                        <h4>Payload</h4>
+                        <div class="codeblock">
+                            <div class="codeblock-label"><span class="cdot cdot-payload"></span> Payload</div>
+                            <pre>{{ f.payload }}</pre>
+                        </div>
+                        {% endif %}
+
+                        {% if f.poc %}
+                        <h4>Proof of Concept</h4>
+                        <div class="codeblock">
+                            <div class="codeblock-label"><span class="cdot cdot-poc"></span> PoC</div>
+                            <pre>{{ f.poc }}</pre>
+                        </div>
+                        {% endif %}
+
+                        {% if f.discovery_steps %}
+                        <h4>Discovery Methodology</h4>
+                        <ol class="steps">
+                            {% for step in f.discovery_steps %}
+                            <li>
+                                {% if step is mapping %}
+                                    <strong>{{ step.phase | default('Step ' ~ loop.index) }}:</strong> {{ step.text }}
+                                {% else %}
+                                    {{ step }}
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ol>
+                        {% endif %}
+
+                        {% if f.remediation %}
+                        <h4>Remediation</h4>
+                        <div class="remedy">{{ f.remediation }}</div>
+                        {% endif %}
+
+                        {% if f.code_example_fix %}
+                        <h4>Fix Example</h4>
+                        <div class="codeblock">
+                            <div class="codeblock-label"><span class="cdot cdot-fix"></span> Recommended Fix</div>
+                            <pre>{{ f.code_example_fix }}</pre>
+                        </div>
+                        {% endif %}
+
+                        {% if f.references or f.compliance_tags or f.nis2_control or f.iso27001_control %}
+                        <details>
+                            <summary>References &amp; Compliance</summary>
+                            <div style="padding: 6px 10px;">
+                                {% if f.references %}
+                                <p style="font-size:12px; margin-bottom:6px;">
+                                    {% for ref in f.references.split(',') if f.references is string %}
+                                    <a href="{{ ref.strip() }}" style="color:var(--accent); word-break:break-all;" target="_blank" rel="noopener noreferrer">{{ ref.strip() }}</a>{{ ', ' if not loop.last }}
+                                    {% endfor %}
+                                    {% if f.references is not string %}{{ f.references }}{% endif %}
+                                </p>
+                                {% endif %}
+                                <div class="tags">
+                                    {% if f.owasp_category %}<span class="tag tag-owasp">{{ f.owasp_category }}</span>{% endif %}
+                                    {% if f.cwe %}<span class="tag tag-cwe">{{ f.cwe }}</span>{% endif %}
+                                    {% if f.nis2_control %}<span class="tag tag-comp">NIS2: {{ f.nis2_control }}</span>{% endif %}
+                                    {% if f.iso27001_control %}<span class="tag tag-comp">ISO 27001: {{ f.iso27001_control }}</span>{% endif %}
+                                    {% if f.compliance_tags %}
+                                        {% for ct in f.compliance_tags.split(',') if f.compliance_tags is string %}
+                                        <span class="tag tag-comp">{{ ct.strip() }}</span>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </details>
+                        {% endif %}
+
+                        {% if f.kb_is_critical_when or f.kb_is_not_critical_when %}
+                        <details>
+                            <summary>Severity Context</summary>
+                            <div style="padding: 6px 10px; font-size: 12px;">
+                                {% if f.kb_is_critical_when %}
+                                <p style="margin-bottom:4px"><strong style="color:var(--red)">Critical when:</strong> {{ f.kb_is_critical_when }}</p>
+                                {% endif %}
+                                {% if f.kb_is_not_critical_when %}
+                                <p><strong style="color:var(--green)">Not critical when:</strong> {{ f.kb_is_not_critical_when }}</p>
+                                {% endif %}
+                            </div>
+                        </details>
+                        {% endif %}
+
                     </div>
                 </div>
-                {% endif %}
+                {% endfor %}
+            </section>
 
-                {% if f.evidence is defined and f.evidence %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📋 Evidence</div>
-                    <div class="evidence-block">{{ f.evidence }}</div>
+            {% if attack_chains %}
+            <section id="chains" style="margin-top: 28px;">
+                <h2 class="stitle">Attack Chains <span class="cnt">{{ attack_chains | length }}</span></h2>
+                {% for chain in attack_chains %}
+                <div class="chain">
+                    <h4>{{ chain.description }}</h4>
+                    <div class="ctags">
+                        {% for cat in chain.categories %}<span class="ctag">{{ cat }}</span>{% endfor %}
+                    </div>
                 </div>
-                {% endif %}
-
-                {% if f.payload is defined and f.payload %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">💣 Payload</div>
-                    <div class="evidence-block" style="border-color: var(--orange);">{{ f.payload }}</div>
-                </div>
-                {% endif %}
-
-                {% if f.poc is defined and f.poc %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">🧪 Proof of Concept</div>
-                    <div class="poc-block">{{ f.poc }}</div>
-                </div>
-                {% endif %}
-
-                {% if f.request is defined and f.request %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📨 HTTP Request</div>
-                    <div class="evidence-block" style="border-color: var(--purple);">{{ f.request }}</div>
-                </div>
-                {% endif %}
-
-                {% if f.response is defined and f.response %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">📩 HTTP Response</div>
-                    <div class="evidence-block" style="border-color: var(--green);">{{ f.response }}</div>
-                </div>
-                {% endif %}
-
-                {% if f.remediation is defined and f.remediation %}
-                <div style="margin-top: 0.8rem;">
-                    <div style="color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem;">✅ Remediation</div>
-                    <div class="remediation-block">{{ f.remediation }}</div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-        {% else %}
-        <p style="color: var(--green); text-align: center; padding: 2rem;">&#x2713; No vulnerabilities detected. Target appears secure.</p>
-        {% endif %}
-    </div>
-
-    {% if attack_chains %}
-    <div class="section">
-        <h2>&#x26A0; Attack Chains</h2>
-        {% for chain in attack_chains %}
-        <div class="chain-block">
-            <strong>{{ chain.description }}</strong><br>
-            <span class="tag" style="margin-top: 0.5rem;">{{ chain.categories | join(' &rarr; ') }}</span>
-            {% if chain.impact is defined %}
-            <div style="margin-top: 0.5rem; color: var(--dim);">Impact: {{ chain.impact }}</div>
+                {% endfor %}
+            </section>
             {% endif %}
+
+            {% if compliance %}
+            <section id="compliance" style="margin-top: 28px;">
+                <h2 class="stitle">Compliance</h2>
+                <div class="comp-grid">
+                    {% for framework, data in compliance.items() %}
+                    <div class="comp-card">
+                        <div class="fw">{{ framework }}</div>
+                        <div class="st">{{ data.status | default('Pending') }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            <section id="recommendations" style="margin-top: 28px;">
+                <h2 class="stitle">Recommendations</h2>
+                {% set rec_list = scan.get('recommendations', []) if scan else [] %}
+                {% if rec_list %}
+                    {% for rec in rec_list %}
+                    <div class="rec">
+                        <strong>{{ loop.index }}. {{ rec.title | default(rec) }}</strong>
+                        {% if rec is mapping and rec.description %}<p>{{ rec.description }}</p>{% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="rec"><strong>1. Address critical and high severity findings immediately.</strong><p>Prioritize injection, authentication bypass, and RCE vulnerabilities.</p></div>
+                <div class="rec"><strong>2. Harden TLS configuration.</strong><p>Enforce TLS 1.2+ (prefer 1.3), disable weak cipher suites, enable HSTS.</p></div>
+                <div class="rec"><strong>3. Deploy security headers.</strong><p>CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy on all responses.</p></div>
+                <div class="rec"><strong>4. Apply least privilege.</strong><p>Close unnecessary open ports and restrict API access with proper authentication.</p></div>
+                <div class="rec"><strong>5. Schedule regular assessments.</strong><p>Run continuous monitoring to detect new exposures as they emerge.</p></div>
+                {% endif %}
+            </section>
+
         </div>
-        {% endfor %}
-    </div>
-    {% endif %}
 
-    {% if compliance %}
-    <div class="section">
-        <h2>&#x1F4CB; Compliance Dashboard</h2>
-        <table>
-            <thead>
-                <tr><th>Framework</th><th>Status</th><th>Triggered Controls</th></tr>
-            </thead>
-            <tbody>
-            {% for framework, info in compliance.items() %}
-                <tr>
-                    <td><strong>{{ framework }}</strong></td>
-                    <td style="color: {% if info.status == 'compliant' %}var(--green){% else %}var(--red){% endif %}">
-                        {{ info.status | upper }}
-                    </td>
-                    <td>
-                        {% for ctrl in info.triggered_controls %}
-                        <span class="tag">{{ ctrl }}</span>
-                        {% endfor %}
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
+        <aside class="aside">
 
-    {% if scan is defined and scan.scan_config is defined %}
-    <div class="section">
-        <h2>&#x2699; Scan Configuration</h2>
-        <div class="finding-grid">
-            {% for key, value in scan.scan_config.items() %}
-            <div class="finding-field">
-                <div class="field-label">{{ key | replace('_', ' ') | title }}</div>
-                <div class="field-value">{{ value }}</div>
+            <div class="widget">
+                <div class="widget-title">Risk Score</div>
+                <div class="widget-body">
+                    <div class="score-box">
+                        {% set score_val = overall_score | default(0) | int %}
+                        {% set circ = 282 %}
+                        {% set offset = circ - (circ * score_val / 100) %}
+                        {% if score_val >= 80 %}{% set rc = 'var(--red)' %}
+                        {% elif score_val >= 60 %}{% set rc = 'var(--orange)' %}
+                        {% elif score_val >= 40 %}{% set rc = 'var(--yellow)' %}
+                        {% elif score_val >= 20 %}{% set rc = 'var(--green)' %}
+                        {% else %}{% set rc = 'var(--fg-faint)' %}{% endif %}
+                        <div class="score-ring">
+                            <svg width="100" height="100" viewBox="0 0 100 100">
+                                <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="ring-fg" cx="50" cy="50" r="45"
+                                    stroke="{{ rc }}"
+                                    stroke-dasharray="{{ circ }}"
+                                    stroke-dashoffset="{{ offset }}"></circle>
+                            </svg>
+                            <div class="score-value">
+                                <span class="num" style="color:{{ rc }}">{{ score_val }}</span>
+                                <span class="of">/ 100</span>
+                            </div>
+                        </div>
+                        <div style="text-align:center; margin-top:8px;">
+                            <span class="risk-pill risk-{{ risk_level | default('info') | lower }}">{{ risk_level | default('info') | upper }} RISK</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
 
-    <div class="footer">
-        <strong>VAPT CLI</strong> — Professional Bug Bounty Scanner<br>
-        <span style="font-size: 0.8rem; opacity: 0.7;">All findings enriched with CWE, CVSS vector, step-by-step PoC, and real HTTP evidence. Report generated automatically.</span>
+            <div class="widget">
+                <div class="widget-title">Scan Info</div>
+                <div class="widget-body">
+                    <ul class="wlist">
+                        <li><span class="k">Target</span><span class="v">{{ target }}</span></li>
+                        <li><span class="k">Date</span><span class="v">{{ generated_at }}</span></li>
+                        <li><span class="k">Findings</span><span class="v">{{ findings | length }}</span></li>
+                        {% if scan %}
+                        {% if scan.duration_seconds %}<li><span class="k">Duration</span><span class="v">{{ scan.duration_seconds | int }}s</span></li>{% endif %}
+                        {% if scan.scan_id %}<li><span class="k">Scan ID</span><span class="v" style="font-size:10px">{{ scan.scan_id }}</span></li>{% endif %}
+                        {% if scan.modules_run %}<li><span class="k">Modules</span><span class="v" style="font-size:10px">{{ scan.modules_run | join(', ') }}</span></li>{% endif %}
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="widget">
+                <div class="widget-title">By Severity</div>
+                <div class="widget-body">
+                    <ul class="wlist">
+                        {% if critical %}<li><span class="k" style="color:var(--red)">Critical</span><span class="v">{{ critical }}</span></li>{% endif %}
+                        {% if high %}<li><span class="k" style="color:var(--orange)">High</span><span class="v">{{ high }}</span></li>{% endif %}
+                        {% if medium %}<li><span class="k" style="color:var(--yellow)">Medium</span><span class="v">{{ medium }}</span></li>{% endif %}
+                        {% if low %}<li><span class="k" style="color:var(--green)">Low</span><span class="v">{{ low }}</span></li>{% endif %}
+                        {% if info %}<li><span class="k">Info</span><span class="v">{{ info }}</span></li>{% endif %}
+                    </ul>
+                </div>
+            </div>
+
+            {% if compliance %}
+            <div class="widget">
+                <div class="widget-title">Compliance</div>
+                <div class="widget-body">
+                    <ul class="wlist">
+                        {% for framework, data in compliance.items() %}
+                        <li><span class="k">{{ framework }}</span><span class="v">{{ data.status | default('Pending') }}</span></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="widget">
+                <div class="widget-title">Jump To</div>
+                <div class="widget-body">
+                    <ul class="wlist">
+                        {% for f in findings %}
+                        <li>
+                            <a href="#f-{{ loop.index }}" style="color:var(--accent); text-decoration:none; font-size:11px; display:flex; gap:5px; align-items:center; overflow:hidden;">
+                                <span class="risk-pill risk-{{ f.severity | default('info') | lower }}" style="font-size:9px; padding:0 5px;">{{ f.severity | default('info') | upper | truncate(4, True, '') }}</span>
+                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ f.title | default('Finding') | truncate(28) }}</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+        </aside>
     </div>
 </div>
+
+<footer>
+    VAPT CLI — Automated Security Assessment Report<br>
+    Confidential — Authorized personnel only<br>
+    {{ generated_at }}
+</footer>
+
 </body>
 </html>
